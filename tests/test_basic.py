@@ -8,16 +8,10 @@ except Exception as e:
     print(f"❌ Config 模块导入失败: {e}")
 
 try:
-    from youyou.core.router import LLMRouter
-    print("✅ Router 模块导入成功")
+    from youyou.core.database import get_database
+    print("✅ Database 模块导入成功")
 except Exception as e:
-    print(f"❌ Router 模块导入失败: {e}")
-
-try:
-    from youyou.core.memory import memory_manager
-    print("✅ Memory 模块导入成功")
-except Exception as e:
-    print(f"❌ Memory 模块导入失败: {e}")
+    print(f"❌ Database 模块导入失败: {e}")
 
 try:
     from youyou.agents.item_agent import item_agent

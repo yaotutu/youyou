@@ -26,8 +26,8 @@ class Config:
     USER_ID: str = os.getenv("USER_ID", "default")
     DATA_DIR: Path = Path(os.getenv("DATA_DIR", "./data"))
 
-    # mem0 配置
-    MEMORY_DB_PATH: Path = DATA_DIR / "memory.db"
+    # SQLite 数据库配置
+    ITEMS_DB_PATH: Path = DATA_DIR / "items.db"
 
     @classmethod
     def validate(cls) -> bool:

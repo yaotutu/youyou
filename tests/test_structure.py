@@ -49,7 +49,6 @@ dependencies = [
     ("langgraph", "langgraph"),
     ("langchain_openai", "langchain-openai"),
     ("langchain_core", "langchain-core"),
-    ("mem0", "mem0ai"),
     ("rich", "rich"),
     ("prompt_toolkit", "prompt-toolkit"),
 ]
@@ -62,11 +61,11 @@ for module, package in dependencies:
         print(f"  ✗ {package} - 未安装!")
         all_pass = False
 
-# 测试3: 测试导入
+# 测试3: 测试模块导入
 print("\n测试3: 测试模块导入")
 imports = [
     ("youyou.config", "config"),
-    ("youyou.core.memory", "memory_manager"),
+    ("youyou.core.database", "get_database"),
     ("youyou.tools.item_tools", "remember_item_location"),
     ("youyou.agents.item_agent", "item_agent"),
     ("youyou.agents.chat_agent", "chat_agent"),
