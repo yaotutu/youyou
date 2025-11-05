@@ -249,6 +249,53 @@ class ItemDatabase:
 
         self.conn.commit()
 
+    def _verify_item_name(self, result: Dict[str, Any], query_item: str) -> bool:
+        """验证查询结果的物品名称是否匹配查询
+
+        防止记忆混淆:只有当查询词在物品名称中时才认为匹配成功。
+
+        Args:
+            result: 数据库查询结果(dict)
+            query_item: 用户查询的物品名称
+
+        Returns:
+            True 如果匹配, False 如果不匹配
+
+        Examples:
+            >>> result = {'item_name': '护照', 'location': '卧室'}
+            >>> self._verify_item_name(result, '护照')  # True
+            >>> self._verify_item_name(result, '时光机')  # False
+        """
+        stored_name = result['item_name'].lower().strip()
+        query_name = query_item.lower().strip()
+        normalized_query = normalize_item_name(query_item)
+        normalized_stored = normalize_item_name(result['item_name'])
+
+        # 策略1: 查询词完全包含在物品名称中
+        if query_name in stored_name:
+            return True
+
+        # 策略2: 物品名称包含在查询词中 (如查询"家门钥匙",匹配"钥匙")
+        if stored_name in query_name:
+            return True
+
+        # 策略3: 规范化后的名称匹配
+        if normalized_query in normalized_stored or normalized_stored in normalized_query:
+            return True
+
+        # 策略4: 检查别名
+        if 'item_aliases' in result and result['item_aliases']:
+            try:
+                aliases = json.loads(result['item_aliases'])
+                for alias in aliases:
+                    alias_lower = alias.lower().strip()
+                    if query_name in alias_lower or alias_lower in query_name:
+                        return True
+            except:
+                pass
+
+        return False
+
     def remember_item(self, item: str, location: str,
                       user_id: str = 'default',
                       location_detail: Optional[str] = None) -> Dict[str, Any]:
@@ -434,7 +481,7 @@ class ItemDatabase:
                 'message': f"{result_dict['item_name']}在{result_dict['location']}"
             }
 
-        # 级别2: 别名匹配
+        # 级别2: 别名匹配 (带验证)
         print(f"[数据库] 精确匹配失败,尝试别名匹配...")
         cursor.execute("""
             SELECT * FROM items
@@ -448,20 +495,33 @@ class ItemDatabase:
 
         results = cursor.fetchall()
         if results:
-            # 计算相似度,选择最佳匹配
-            best_match = dict(results[0])
-            print(f"[数据库] ✓ 别名匹配成功: {best_match['item_name']}")
+            # 验证每个匹配结果的物品名称
+            for row in results:
+                match = dict(row)
+                if self._verify_item_name(match, item):
+                    print(f"[数据库] ✓ 别名匹配成功(已验证): {match['item_name']}")
 
-            return {
-                'status': 'success',
-                'match_type': 'alias',
-                'item': best_match['item_name'],
-                'location': best_match['location'],
-                'location_detail': best_match['location_detail'],
-                'message': f"找到相似物品: {best_match['item_name']}在{best_match['location']}"
-            }
+                    # 更新访问统计
+                    cursor.execute("""
+                        UPDATE items
+                        SET query_count = query_count + 1,
+                            last_accessed_at = ?
+                        WHERE id = ?
+                    """, (now, match['id']))
+                    self.conn.commit()
 
-        # 级别3: FTS5 全文搜索
+                    return {
+                        'status': 'success',
+                        'match_type': 'alias',
+                        'item': match['item_name'],
+                        'location': match['location'],
+                        'location_detail': match['location_detail'],
+                        'message': f"找到相似物品: {match['item_name']}在{match['location']}"
+                    }
+
+            print(f"[数据库] 别名匹配验证失败,无匹配物品")
+
+        # 级别3: FTS5 全文搜索 (带验证)
         print(f"[数据库] 别名匹配失败,尝试全文搜索...")
         try:
             cursor.execute("""
@@ -476,17 +536,31 @@ class ItemDatabase:
 
             results = cursor.fetchall()
             if results:
-                best_match = dict(results[0])
-                print(f"[数据库] ✓ 全文搜索成功: {best_match['item_name']}")
+                # 验证每个全文搜索结果
+                for row in results:
+                    match = dict(row)
+                    if self._verify_item_name(match, item):
+                        print(f"[数据库] ✓ 全文搜索成功(已验证): {match['item_name']}")
 
-                return {
-                    'status': 'success',
-                    'match_type': 'fuzzy',
-                    'item': best_match['item_name'],
-                    'location': best_match['location'],
-                    'location_detail': best_match['location_detail'],
-                    'message': f"可能是: {best_match['item_name']}在{best_match['location']}"
-                }
+                        # 更新访问统计
+                        cursor.execute("""
+                            UPDATE items
+                            SET query_count = query_count + 1,
+                                last_accessed_at = ?
+                            WHERE id = ?
+                        """, (now, match['id']))
+                        self.conn.commit()
+
+                        return {
+                            'status': 'success',
+                            'match_type': 'fuzzy',
+                            'item': match['item_name'],
+                            'location': match['location'],
+                            'location_detail': match['location_detail'],
+                            'message': f"可能是: {match['item_name']}在{match['location']}"
+                        }
+
+                print(f"[数据库] 全文搜索验证失败,无匹配物品")
         except Exception as e:
             print(f"[数据库] 全文搜索失败: {e}")
 
@@ -651,15 +725,26 @@ class ItemDatabase:
 
 # 全局数据库实例 (延迟初始化)
 _db_instance: Optional[ItemDatabase] = None
+_db_lock = threading.Lock()  # 线程锁保护单例初始化
 
 
 def get_database() -> ItemDatabase:
-    """获取全局数据库实例 (单例模式)"""
+    """获取全局数据库实例 (线程安全单例模式)
+
+    使用双重检查锁定 (Double-Checked Locking) 模式:
+    - 第一次检查(无锁): 如果实例已存在,直接返回(快速路径)
+    - 获取锁: 多个线程竞争锁,只有一个线程能获取
+    - 第二次检查(有锁): 确保只有一个线程初始化实例
+    """
     global _db_instance
 
+    # 第一次检查 (无锁) - 快速路径
     if _db_instance is None:
-        from youyou.config import config
-        db_path = config.DATA_DIR / "items.db"
-        _db_instance = ItemDatabase(db_path)
+        with _db_lock:  # 获取锁
+            # 第二次检查 (有锁) - 确保只有一个线程初始化
+            if _db_instance is None:
+                from youyou.config import config
+                db_path = config.DATA_DIR / "items.db"
+                _db_instance = ItemDatabase(db_path)
 
     return _db_instance

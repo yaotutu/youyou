@@ -154,3 +154,8 @@ DATA_DIR=./data
 - 使用的 LLM 和嵌入模型
 - API Base URL
 - 初始化成功/失败状态
+
+
+
+# 重要规则
+- 所有的test脚本必须放在scripts目录下。
