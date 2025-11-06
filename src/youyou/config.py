@@ -29,6 +29,10 @@ class Config:
     # SQLite 数据库配置
     ITEMS_DB_PATH: Path = DATA_DIR / "items.db"
 
+    # Zep 记忆系统配置 (可选)
+    ZEP_API_KEY: str = os.getenv("ZEP_API_KEY", "")  # Zep Cloud API Key
+    ZEP_API_URL: str = os.getenv("ZEP_API_URL", "http://localhost:8000")  # 本地 Zep URL
+
     @classmethod
     def validate(cls) -> bool:
         """验证配置是否有效"""
@@ -45,6 +49,7 @@ class Config:
     def display(cls) -> None:
         """显示当前配置(隐藏敏感信息)"""
         masked_key = '*' * 10 + cls.OPENAI_API_KEY[-4:] if cls.OPENAI_API_KEY else '未设置'
+        masked_zep_key = '*' * 10 + cls.ZEP_API_KEY[-4:] if cls.ZEP_API_KEY else '未设置'
         print("当前配置:")
         print(f"  API Base: {cls.OPENAI_API_BASE}")
         print(f"  API Key: {masked_key}")
@@ -52,6 +57,8 @@ class Config:
         print(f"  Agent模型: {cls.AGENT_MODEL}")
         print(f"  用户ID: {cls.USER_ID}")
         print(f"  数据目录: {cls.DATA_DIR}")
+        print(f"  Zep API Key: {masked_zep_key}")
+        print(f"  Zep API URL: {cls.ZEP_API_URL}")
 
 
 # 全局配置实例

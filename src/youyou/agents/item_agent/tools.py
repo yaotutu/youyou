@@ -5,8 +5,9 @@
 from typing import Dict, Any
 from langchain_core.tools import tool
 
-from core.database import get_database
-from config import config
+from youyou.core.database import get_database
+from youyou.core.zep_memory import get_zep_memory
+from youyou.config import config
 
 
 def _remember_item_location_impl(item: str, location: str) -> Dict[str, Any]:
@@ -60,10 +61,12 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
     """
     查询物品位置的实现逻辑
 
-    使用三级查询策略:
+    使用五级查询策略:
     1. 精确匹配 (normalized_name)
     2. 别名匹配 (item_aliases)
     3. FTS5 全文搜索
+    4. LIKE 关键词模糊匹配
+    5. Zep 语义搜索历史对话 (兜底)
 
     Args:
         item: 物品名称
@@ -74,7 +77,7 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
     try:
         print(f"\n[物品工具] 🔍 查询物品位置: {item}")
 
-        # 使用数据库查询
+        # 级别 1-4: 使用数据库查询 (四级策略)
         db = get_database()
         result = db.query_item(
             item=item,
@@ -88,7 +91,38 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
             print(f"[物品工具] ✓ 查询成功 (match_type: {match_type})")
             return result
         elif result.get("status") == "not_found":
-            print(f"[物品工具] ℹ 未找到物品")
+            print(f"[物品工具] ℹ SQLite 未找到物品，尝试 Zep 兜底查询...")
+
+            # 级别 5: Zep 语义搜索兜底
+            try:
+                zep = get_zep_memory()
+                memories = zep.search_memory(
+                    query=f"用户提到 {item} 的位置、存放位置、放在哪里",
+                    limit=3
+                )
+
+                if memories:
+                    print(f"[物品工具] ✓ Zep 找到 {len(memories)} 条相关记忆")
+
+                    # 提取最相关的记忆
+                    best_memory = memories[0]
+                    context = best_memory['content']
+
+                    return {
+                        "status": "success",
+                        "match_type": "zep_semantic",
+                        "item": item,
+                        "message": f"在历史对话中找到相关信息：{context}",
+                        "zep_context": context,
+                        "confidence": "low"  # 标记为低置信度
+                    }
+                else:
+                    print(f"[物品工具] ℹ Zep 也未找到相关记忆")
+
+            except Exception as zep_error:
+                print(f"[物品工具] ⚠️  Zep 查询失败: {zep_error}")
+
+            # 所有方法都失败
             return result
         else:
             return {
@@ -139,10 +173,35 @@ def remember_item_location(item: str, location: str) -> str:
         location: 物品位置
 
     Returns:
-        记录结果的消息
+        记录结果的消息(包含 action 信息)
     """
     result = _remember_item_location_impl(item, location)
-    return result.get("message", "操作失败")
+
+    if result.get("status") != "success":
+        return result.get("message", "操作失败")
+
+    # 根据 action 类型返回不同的消息格式（使用明确的前缀让 LLM 识别）
+    action = result.get("action", "unknown")
+    item_name = result.get("item", item)
+    location_name = result.get("location", location)
+
+    if action == "created":
+        # 首次记录
+        return f"✅ 新记录成功: {item_name} 已记录在 {location_name}"
+
+    elif action == "confirmed":
+        # 重复记录（位置相同）
+        return f"⚠️ 重复记录提醒: {item_name} 之前已经记录在 {location_name} 了，位置没有变化"
+
+    elif action == "moved":
+        # 位置更新
+        old_location = result.get("old_location", "")
+        new_location = result.get("new_location", location_name)
+        return f"🔄 位置已更新: {item_name} 从 [{old_location}] 移到了 [{new_location}]"
+
+    else:
+        # 未知操作类型（fallback）
+        return result.get("message", "操作完成")
 
 
 @tool

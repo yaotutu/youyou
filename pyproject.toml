@@ -16,10 +16,13 @@ dependencies = [
     "flask>=3.0.0",
     "flask-restx>=1.3.0",
     "flask-cors>=4.0.0",
+    # Zep 记忆系统 (支持 Cloud 和本地部署)
+    "zep-cloud>=2.0.0",  # Zep Cloud SDK
+    "zep-python>=2.0.0",  # 本地 Zep SDK
 ]
 
 [project.scripts]
-youyou-server = "server:main"
+youyou-server = "youyou.server:main"
 
 [project.optional-dependencies]
 dev = [

@@ -536,23 +536,41 @@ class ItemDatabase:
                 'message': f"{result_dict['item_name']}在{result_dict['location']}"
             }
 
-        # 级别2: 别名匹配 (带验证)
+        # 级别2: 别名匹配 (JSON 解析 + 逐一比对) + 验证
         print(f"[数据库] 精确匹配失败,尝试别名匹配...")
+
+        # 获取所有未删除的物品
         cursor.execute("""
             SELECT * FROM items
             WHERE user_id = ? AND is_deleted = 0
-            AND (
-                item_aliases LIKE ?
-                OR normalized_name LIKE ?
-            )
-            LIMIT 5
-        """, (user_id, f'%{normalized}%', f'%{normalized}%'))
+        """, (user_id,))
 
-        results = cursor.fetchall()
-        if results:
-            # 验证每个匹配结果的物品名称
-            for row in results:
-                match = dict(row)
+        all_items = cursor.fetchall()
+        matched_items = []
+
+        # 逐一检查别名
+        for row in all_items:
+            item_dict = dict(row)
+
+            # 解析 JSON 别名
+            if item_dict.get('item_aliases'):
+                try:
+                    aliases = json.loads(item_dict['item_aliases'])
+
+                    # 检查查询词是否在任何别名中
+                    for alias in aliases:
+                        alias_normalized = normalize_item_name(alias)
+                        # 双向匹配: normalized 在 alias 中，或 alias 在 normalized 中
+                        if normalized in alias_normalized or alias_normalized in normalized:
+                            matched_items.append(item_dict)
+                            print(f"[数据库]   别名匹配候选: {item_dict['item_name']} (别名: {alias})")
+                            break
+                except json.JSONDecodeError:
+                    continue
+
+        # 验证匹配结果
+        if matched_items:
+            for match in matched_items:
                 if self._verify_item_name(match, item):
                     print(f"[数据库] ✓ 别名匹配成功(已验证): {match['item_name']}")
 
@@ -638,13 +656,15 @@ class ItemDatabase:
 
             results = cursor.fetchall()
             if results:
-                # 验证每个匹配结果
+                # 验证每个匹配结果 - 使用 _verify_item_name
                 for row in results:
                     match = dict(row)
-                    # 计算匹配度: 匹配的关键词数量
-                    match_score = sum(1 for kw in keywords if kw in match['normalized_name'])
 
-                    if match_score > 0:  # 至少有一个关键词匹配
+                    # 必须通过名称验证
+                    if self._verify_item_name(match, item):
+                        # 计算匹配度: 匹配的关键词数量
+                        match_score = sum(1 for kw in keywords if kw in match['normalized_name'])
+
                         print(f"[数据库] ✓ 关键词模糊匹配成功 (关键词: '{keyword}', 匹配度: {match_score}): {match['item_name']}")
 
                         # 更新访问统计
@@ -848,7 +868,7 @@ def get_database() -> ItemDatabase:
         with _db_lock:  # 获取锁
             # 第二次检查 (有锁) - 确保只有一个线程初始化
             if _db_instance is None:
-                from config import config
+                from youyou.config import config
                 db_path = config.DATA_DIR / "items.db"
                 _db_instance = ItemDatabase(db_path)
 

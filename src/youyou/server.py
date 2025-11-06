@@ -10,8 +10,10 @@ from flask import Flask
 from flask_restx import Api, Resource, fields
 from flask_cors import CORS
 
-from config import config
-from agents.supervisor import supervisor
+from youyou.config import config
+from youyou.agents.supervisor import supervisor
+from youyou.core.zep_memory import get_zep_memory
+from youyou.core.session_history import get_session_manager
 
 # 配置日志
 logging.basicConfig(
@@ -94,14 +96,33 @@ class ChatMessage(Resource):
             if not user_input:
                 return {"error": "消息不能为空"}, 400
 
+            # 添加消息长度限制
+            MAX_MESSAGE_LENGTH = 1000
+            if len(user_input) > MAX_MESSAGE_LENGTH:
+                logger.warning(f"消息过长: {len(user_input)} 字符 (最大 {MAX_MESSAGE_LENGTH})")
+                return {"error": f"消息过长,最多支持 {MAX_MESSAGE_LENGTH} 个字符"}, 400
+
             logger.info("=" * 80)
             logger.info(f"📥 收到用户消息: {user_input}")
             logger.info("-" * 80)
 
-            # 调用 supervisor 处理
+            # 1. 获取会话历史管理器
+            session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
+            user_id = config.USER_ID
+
+            # 2. 从内存获取会话历史 (首次会从 Zep 加载)
+            session_history = session_mgr.get_history(user_id)
+            logger.info(f"📚 获取到 {len(session_history)} 条会话历史 (内存缓存)")
+
+            # 3. 构建完整的消息列表（会话历史 + 当前输入）
+            messages = session_history + [{"role": "user", "content": user_input}]
+
+            logger.info(f"📝 总消息数: {len(messages)} (历史 {len(session_history)} + 当前 1)")
+
+            # 4. 调用 supervisor 处理（现在有完整上下文）
             logger.info("🤖 调用 Supervisor Agent 处理请求...")
             result = supervisor.invoke({
-                "messages": [{"role": "user", "content": user_input}]
+                "messages": messages
             })
 
             logger.info(f"✓ Supervisor 返回结果,消息数量: {len(result.get('messages', []))}")
@@ -136,6 +157,16 @@ class ChatMessage(Resource):
                 logger.info("消息列表为空")
 
             logger.info(f"📤 返回响应 (前200字): {response[:200]}...")
+
+            # 5. 更新会话历史 (内存 + 异步持久化到 Zep)
+            session_mgr.add_interaction(
+                user_id=user_id,
+                user_input=user_input,
+                assistant_response=response,
+                agent_name="supervisor",
+                async_persist=True  # 异步写入 Zep,不阻塞响应
+            )
+            logger.info("💾 交互已保存到内存并异步持久化到 Zep")
             logger.info("=" * 80)
 
             return {
