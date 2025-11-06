@@ -10,12 +10,12 @@ from flask import Flask
 from flask_restx import Api, Resource, fields
 from flask_cors import CORS
 
-from youyou.config import config
-from youyou.agents.supervisor import supervisor
-from youyou.agents.note_agent import note_agent
-from youyou.core.zep_memory import get_zep_memory
-from youyou.core.session_history import get_session_manager
-from youyou.core.tag_parser import TagParser
+from config import config
+from agents.supervisor import supervisor
+from agents.note_agent import note_agent
+from core.zep_memory import get_zep_memory
+from core.session_history import get_session_manager
+from core.tag_parser import TagParser
 
 # 配置日志
 logging.basicConfig(

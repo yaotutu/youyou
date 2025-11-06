@@ -6,6 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 YouYou 是一个基于 LangChain 1.0 的本地智能助手系统，采用多 Agent 架构，支持物品位置记忆和对话功能。
 
+## 目录结构
+
+```
+src/
+  agents/         # Agent 模块
+  core/           # 核心组件
+  tools/          # 工具模块
+  config.py       # 配置管理
+  server.py       # Flask 服务器
+  youyou/         # 包入口（兼容 uv）
+    __init__.py
+scripts/          # 测试和工具脚本
+tests/            # 单元测试
+```
+
+**重要说明**：
+- `src/` 下直接包含主要模块，无需再嵌套 `youyou/` 目录
+- `src/youyou/` 仅用于兼容 uv 的包管理，实际代码在 `src/` 下
+- 导入时直接使用 `from config import ...`，`from agents.xxx import ...`
+
 ## 项目规范
 
 ### 文件组织规则
@@ -147,7 +167,7 @@ DATA_DIR=./data
 ## 常见开发任务
 
 ### 添加新 Agent
-1. 在 `src/youyou/agents/` 创建新目录
+1. 在 `src/agents/` 创建新目录
 2. 创建 `agent.py`（使用 `create_agent`）、`tools.py`（定义工具）、`prompts.py`（系统提示）
 3. 在 Supervisor 的 `tools.py` 中添加调用新 Agent 的工具
 4. 更新 Supervisor 的系统提示，说明何时使用新 Agent

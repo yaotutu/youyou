@@ -868,7 +868,7 @@ def get_database() -> ItemDatabase:
         with _db_lock:  # 获取锁
             # 第二次检查 (有锁) - 确保只有一个线程初始化
             if _db_instance is None:
-                from youyou.config import config
+                from config import config
                 db_path = config.DATA_DIR / "items.db"
                 _db_instance = ItemDatabase(db_path)
 

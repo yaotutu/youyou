@@ -10,7 +10,7 @@ from dataclasses import dataclass, asdict
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
-from youyou.config import Config
+from config import Config
 
 
 class NoteType(str, Enum):

@@ -6,7 +6,7 @@ from typing import List
 
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
-from youyou.config import Config
+from config import Config
 
 
 class NoteUtils:

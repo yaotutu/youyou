@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-youyou-server = "youyou.server:main"
+youyou-server = "server:main"
 
 [project.optional-dependencies]
 dev = [
@@ -37,6 +37,12 @@ dev = [
 
 [tool.uv]
 package = true
+
+[tool.setuptools]
+py-modules = ["server", "config"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [build-system]
 requires = ["uv_build>=0.9.2,<0.10.0"]

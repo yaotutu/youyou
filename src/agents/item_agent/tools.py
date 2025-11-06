@@ -5,9 +5,9 @@
 from typing import Dict, Any
 from langchain_core.tools import tool
 
-from youyou.core.database import get_database
-from youyou.core.zep_memory import get_zep_memory
-from youyou.config import config
+from core.database import get_database
+from core.zep_memory import get_zep_memory
+from config import config
 
 
 def _remember_item_location_impl(item: str, location: str) -> Dict[str, Any]:

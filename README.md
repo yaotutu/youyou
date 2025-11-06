@@ -43,7 +43,7 @@ youyou/
 │   ├── CLIENT_SERVER_GUIDE.md  # 客户端-服务端指南
 │   ├── note_agent_guide.md # NoteAgent 使用指南（新增）
 │   └── TROUBLESHOOTING.md  # 问题排查
-├── src/youyou/
+├── src/
 │   ├── agents/             # Agents
 │   │   ├── item_agent/    # 物品管理 Agent
 │   │   ├── chat_agent/    # 对话 Agent
@@ -54,7 +54,9 @@ youyou/
 │   ├── tools/             # 公共工具
 │   ├── config.py          # 配置
 │   ├── server.py          # 服务端
-│   └── cli.py             # 客户端
+│   ├── cli.py             # 客户端
+│   └── youyou/            # 包入口（兼容 uv）
+│       └── __init__.py
 ├── scripts/                # 测试脚本
 │   └── test_note_agent.py # NoteAgent 测试（新增）
 ├── tests/                  # 测试文件
@@ -64,6 +66,8 @@ youyou/
         ├── notes.db       # SQLite 数据库
         └── qdrant/        # Qdrant 向量库
 ```
+
+**注意**：目录结构已扁平化，主要代码直接在 `src/` 下，`src/youyou/` 仅用于兼容 uv 包管理。
 
 ## 配置
 

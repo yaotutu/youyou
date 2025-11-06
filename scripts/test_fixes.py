@@ -19,14 +19,14 @@ def test_import_structure():
     try:
         # 应该失败 - tools/ 已删除
         try:
-            from youyou.tools.item_tools import remember_item_location
+            from tools.item_tools import remember_item_location
             print("❌ tools/ 目录仍然存在")
             return False
         except ImportError:
             print("✅ tools/ 目录已删除")
 
         # 应该成功 - 从 item_agent 导入
-        from youyou.agents.item_agent.tools import (
+        from agents.item_agent.tools import (
             remember_item_location,
             query_item_location,
             list_all_items
@@ -49,7 +49,7 @@ def test_base_agent_method():
     print("="*60)
 
     try:
-        from youyou.core.agent_base import BaseAgent
+        from core.agent_base import BaseAgent
 
         # 测试提取方法存在
         if not hasattr(BaseAgent, '_extract_response_from_result'):
@@ -87,7 +87,7 @@ def test_thread_safe_singleton():
     print("="*60)
 
     try:
-        from youyou.core.database import get_database, _db_lock
+        from core.database import get_database, _db_lock
 
         # 验证锁存在
         if _db_lock is None:
@@ -133,8 +133,8 @@ def test_memory_confusion_fix():
     print("="*60)
 
     try:
-        from youyou.core.database import get_database
-        from youyou.config import config
+        from core.database import get_database
+        from config import config
 
         db = get_database()
 

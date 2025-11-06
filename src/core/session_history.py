@@ -11,7 +11,7 @@ import time
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from youyou.core.zep_memory import get_zep_memory
+from core.zep_memory import get_zep_memory
 
 
 class SessionHistoryManager:

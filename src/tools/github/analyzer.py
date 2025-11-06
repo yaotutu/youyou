@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 
 from langchain_openai import ChatOpenAI
 
-from youyou.config import Config
+from config import Config
 
 
 class GitHubAnalyzer:

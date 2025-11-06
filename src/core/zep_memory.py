@@ -9,7 +9,7 @@ import threading
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from youyou.config import config
+from config import config
 
 
 class ZepMemoryManager:

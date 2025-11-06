@@ -6,7 +6,7 @@ from pathlib import Path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root / "src"))
 
-from youyou.core.database import get_database
+from core.database import get_database
 
 print("测试数据库写入...")
 

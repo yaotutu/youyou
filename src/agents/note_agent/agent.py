@@ -2,10 +2,10 @@
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
-from youyou.config import config
-from youyou.core.agent_base import BaseAgent, AgentRegistry
-from youyou.agents.note_agent.tools import get_note_agent_tools
-from youyou.agents.note_agent.prompts import NOTE_AGENT_SYSTEM_PROMPT
+from config import config
+from core.agent_base import BaseAgent, AgentRegistry
+from agents.note_agent.tools import get_note_agent_tools
+from agents.note_agent.prompts import NOTE_AGENT_SYSTEM_PROMPT
 
 
 class NoteAgent(BaseAgent):

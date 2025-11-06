@@ -4,6 +4,6 @@
 可被任何 Agent 使用。
 """
 
-from youyou.tools.github.analyzer import GitHubAnalyzer
+from tools.github.analyzer import GitHubAnalyzer
 
 __all__ = ["GitHubAnalyzer"]

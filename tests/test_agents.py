@@ -3,7 +3,7 @@ import os
 os.environ["OPENAI_API_KEY"] = "sk-test"
 os.environ["OPENAI_API_BASE"] = "https://api.openai.com/v1"
 
-from youyou.agents.supervisor import supervisor
+from agents.supervisor import supervisor
 
 def test_chat():
     """测试对话功能"""

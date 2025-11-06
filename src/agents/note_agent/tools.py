@@ -7,9 +7,9 @@ from typing import List, Optional
 
 from langchain_core.tools import tool
 
-from youyou.config import Config
-from youyou.tools.storage import NoteStorage, NoteType, NoteUtils
-from youyou.tools.github import GitHubAnalyzer
+from config import Config
+from tools.storage import NoteStorage, NoteType, NoteUtils
+from tools.github import GitHubAnalyzer
 
 
 # 全局单例实例（模块级别，确保整个进程只有一个实例）
