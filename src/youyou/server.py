@@ -12,8 +12,10 @@ from flask_cors import CORS
 
 from youyou.config import config
 from youyou.agents.supervisor import supervisor
+from youyou.agents.note_agent import note_agent
 from youyou.core.zep_memory import get_zep_memory
 from youyou.core.session_history import get_session_manager
+from youyou.core.tag_parser import TagParser
 
 # 配置日志
 logging.basicConfig(
@@ -87,6 +89,7 @@ class ChatMessage(Resource):
         - 记录物品位置：如 "钥匙放在书桌抽屉里"
         - 查询物品位置：如 "钥匙在哪？"
         - 列出所有物品：如 "我记录了哪些物品？"
+        - 保存笔记：如 "#note 记录一个想法" 或 "https://github.com/..."
         - 日常对话：如 "你好"、"今天天气怎么样"
         """
         try:
@@ -106,20 +109,54 @@ class ChatMessage(Resource):
             logger.info(f"📥 收到用户消息: {user_input}")
             logger.info("-" * 80)
 
-            # 1. 获取会话历史管理器
+            # 1. 解析标记，检测是否需要直接路由
+            parse_result = TagParser.parse(user_input)
+
+            if parse_result.has_tag:
+                logger.info(f"🏷️  检测到标记: {parse_result.tag_type}")
+                logger.info(f"🎯 目标 Agent: {parse_result.target_agent}")
+                logger.info(f"📝 清理后的消息: {parse_result.clean_message}")
+
+                # 直接路由到指定 Agent（跳过 Supervisor）
+                if parse_result.target_agent == "note_agent":
+                    logger.info("🚀 直接调用 NoteAgent (跳过 Supervisor)...")
+                    response = note_agent.invoke(parse_result.clean_message)
+                    logger.info(f"📤 NoteAgent 返回响应 (前200字): {response[:200]}...")
+
+                    # 保存会话历史
+                    session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
+                    session_mgr.add_interaction(
+                        user_id=config.USER_ID,
+                        user_input=user_input,
+                        assistant_response=response,
+                        agent_name="note_agent",
+                        async_persist=True
+                    )
+                    logger.info("💾 交互已保存 (标记路由)")
+                    logger.info("=" * 80)
+
+                    return {
+                        "response": response,
+                        "timestamp": datetime.now().isoformat()
+                    }
+
+            # 2. 没有标记，走正常的 Supervisor 路由
+            logger.info("🔄 未检测到标记，使用 Supervisor 路由...")
+
+            # 获取会话历史管理器
             session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
             user_id = config.USER_ID
 
-            # 2. 从内存获取会话历史 (首次会从 Zep 加载)
+            # 从内存获取会话历史 (首次会从 Zep 加载)
             session_history = session_mgr.get_history(user_id)
             logger.info(f"📚 获取到 {len(session_history)} 条会话历史 (内存缓存)")
 
-            # 3. 构建完整的消息列表（会话历史 + 当前输入）
+            # 构建完整的消息列表（会话历史 + 当前输入）
             messages = session_history + [{"role": "user", "content": user_input}]
 
             logger.info(f"📝 总消息数: {len(messages)} (历史 {len(session_history)} + 当前 1)")
 
-            # 4. 调用 supervisor 处理（现在有完整上下文）
+            # 调用 supervisor 处理（现在有完整上下文）
             logger.info("🤖 调用 Supervisor Agent 处理请求...")
             result = supervisor.invoke({
                 "messages": messages
@@ -135,12 +172,12 @@ class ChatMessage(Resource):
                 logger.info(f"  消息[{i}] {msg_type}: {msg_content}")
 
             # 提取响应 - 优先从 ToolMessage 提取，其次是 AIMessage
-            messages = result.get("messages", [])
+            messages_result = result.get("messages", [])
             response = ""
 
-            if messages:
+            if messages_result:
                 # 倒序查找第一个有内容的消息
-                for msg in reversed(messages):
+                for msg in reversed(messages_result):
                     msg_type = type(msg).__name__
                     content = getattr(msg, 'content', '')
 
@@ -158,7 +195,7 @@ class ChatMessage(Resource):
 
             logger.info(f"📤 返回响应 (前200字): {response[:200]}...")
 
-            # 5. 更新会话历史 (内存 + 异步持久化到 Zep)
+            # 更新会话历史 (内存 + 异步持久化到 Zep)
             session_mgr.add_interaction(
                 user_id=user_id,
                 user_input=user_input,

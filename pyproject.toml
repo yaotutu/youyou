@@ -19,6 +19,10 @@ dependencies = [
     # Zep 记忆系统 (支持 Cloud 和本地部署)
     "zep-cloud>=2.0.0",  # Zep Cloud SDK
     "zep-python>=2.0.0",  # 本地 Zep SDK
+    # NoteAgent 依赖
+    "qdrant-client>=1.7.0",  # 向量数据库
+    "requests>=2.31.0",  # HTTP 请求（GitHub 爬虫）
+    "beautifulsoup4>=4.12.0",  # HTML 解析（可选）
 ]
 
 [project.scripts]

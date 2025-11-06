@@ -10,6 +10,7 @@ from .prompts import SUPERVISOR_SYSTEM_PROMPT
 # 每个子 Agent 在导入时会自动调用 AgentRegistry.register()
 from youyou.agents.item_agent import item_agent  # noqa: F401
 from youyou.agents.chat_agent import chat_agent  # noqa: F401
+from youyou.agents.note_agent import note_agent  # noqa: F401
 
 
 def create_supervisor():
