@@ -2,14 +2,14 @@
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
-from youyou.config import config
-from youyou.core.agent_base import AgentRegistry
+from config import config
+from core.agent_base import AgentRegistry
 from .prompts import SUPERVISOR_SYSTEM_PROMPT
 
 # 导入所有子 Agent 以触发注册
 # 每个子 Agent 在导入时会自动调用 AgentRegistry.register()
-from youyou.agents.item_agent import item_agent  # noqa: F401
-from youyou.agents.chat_agent import chat_agent  # noqa: F401
+from agents.item_agent import item_agent  # noqa: F401
+from agents.chat_agent import chat_agent  # noqa: F401
 
 
 def create_supervisor():

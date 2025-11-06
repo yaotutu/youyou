@@ -10,8 +10,8 @@ from flask import Flask
 from flask_restx import Api, Resource, fields
 from flask_cors import CORS
 
-from youyou.config import config
-from youyou.agents.supervisor import supervisor
+from config import config
+from agents.supervisor import supervisor
 
 # 配置日志
 logging.basicConfig(

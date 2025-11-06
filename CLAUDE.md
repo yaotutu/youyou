@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 YouYou 是一个基于 LangChain 1.0 的本地智能助手系统，采用多 Agent 架构，支持物品位置记忆和对话功能。
 
+## 项目规范
+
+### 文件组织规则
+- **根目录只允许**: `README.md` 和 `CLAUDE.md`
+- **测试脚本**: 所有 `test_*.py`、`check_*.py` 必须放在 `scripts/` 目录
+- **其他文档**: 除 README.md 和 CLAUDE.md 外，其他 .md 文件不允许出现在根目录
+
+项目已配置 post-response hook (`.claude/hooks/post-response.sh`) 自动检查这些规范。
+
 ## 开发命令
 
 ### 依赖管理

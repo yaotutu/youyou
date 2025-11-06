@@ -2,8 +2,8 @@
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 
-from youyou.config import config
-from youyou.core.agent_base import BaseAgent, AgentRegistry
+from config import config
+from core.agent_base import BaseAgent, AgentRegistry
 from .prompts import CHAT_SYSTEM_PROMPT
 
 

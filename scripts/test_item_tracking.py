@@ -9,8 +9,8 @@
 6. 列出所有物品
 7. 记忆混淆验证
 """
-from youyou.core.database import get_database
-from youyou.config import config
+from core.database import get_database
+from config import config
 
 
 def print_section(title):

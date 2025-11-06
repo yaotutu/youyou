@@ -62,6 +62,60 @@ def extract_aliases(item: str) -> List[str]:
     return list(set(aliases))
 
 
+def extract_keywords(text: str) -> List[str]:
+    """
+    从文本中提取关键词用于模糊搜索
+
+    策略:
+    1. 移除常见的助词、介词、量词
+    2. 提取2-4个字的词组
+    3. 保留单个汉字(长度>=2时)
+
+    例如: "摩托车钥匙" -> ["摩托车", "钥匙", "摩托车钥匙"]
+         "摩托车的钥匙" -> ["摩托车", "钥匙", "摩托车的钥匙"]
+
+    Args:
+        text: 输入文本
+
+    Returns:
+        关键词列表
+    """
+    # 常见的停用词(助词、介词等)
+    stopwords = {'的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看'}
+
+    normalized = normalize_item_name(text)
+    keywords = []
+
+    # 保留完整文本
+    keywords.append(normalized)
+
+    # 移除停用词
+    for word in stopwords:
+        normalized = normalized.replace(word, ' ')
+
+    # 按空格分割
+    parts = normalized.split()
+    for part in parts:
+        part = part.strip()
+        if len(part) >= 2:  # 至少2个字符
+            keywords.append(part)
+
+            # 如果是长词,提取子串(2-4字)
+            if len(part) > 4:
+                for i in range(len(part) - 1):
+                    for length in [2, 3, 4]:
+                        if i + length <= len(part):
+                            substr = part[i:i+length]
+                            if len(substr) >= 2:
+                                keywords.append(substr)
+
+    # 去重并按长度排序(优先使用长关键词)
+    keywords = list(set(keywords))
+    keywords.sort(key=len, reverse=True)
+
+    return keywords
+
+
 class ItemDatabase:
     """物品数据库管理类"""
 
@@ -428,12 +482,13 @@ class ItemDatabase:
 
     def query_item(self, item: str, user_id: str = 'default') -> Dict[str, Any]:
         """
-        查询物品位置 - 三级查询策略
+        查询物品位置 - 四级查询策略
 
         查询优先级:
         1. 精确匹配 (normalized_name)
         2. 别名匹配 (item_aliases LIKE)
         3. FTS5 全文搜索
+        4. LIKE 中文模糊匹配 (关键词子串)
 
         Args:
             item: 物品名称
@@ -563,6 +618,56 @@ class ItemDatabase:
                 print(f"[数据库] 全文搜索验证失败,无匹配物品")
         except Exception as e:
             print(f"[数据库] 全文搜索失败: {e}")
+
+        # 级别4: LIKE 中文模糊匹配 (关键词子串)
+        print(f"[数据库] 全文搜索失败,尝试关键词模糊匹配...")
+        keywords = extract_keywords(item)
+        print(f"[数据库]   提取关键词: {keywords[:5]}")  # 只显示前5个
+
+        for keyword in keywords:
+            if len(keyword) < 2:  # 跳过太短的关键词
+                continue
+
+            cursor.execute("""
+                SELECT * FROM items
+                WHERE user_id = ?
+                AND is_deleted = 0
+                AND (item_name LIKE ? OR normalized_name LIKE ?)
+                LIMIT 5
+            """, (user_id, f'%{keyword}%', f'%{keyword}%'))
+
+            results = cursor.fetchall()
+            if results:
+                # 验证每个匹配结果
+                for row in results:
+                    match = dict(row)
+                    # 计算匹配度: 匹配的关键词数量
+                    match_score = sum(1 for kw in keywords if kw in match['normalized_name'])
+
+                    if match_score > 0:  # 至少有一个关键词匹配
+                        print(f"[数据库] ✓ 关键词模糊匹配成功 (关键词: '{keyword}', 匹配度: {match_score}): {match['item_name']}")
+
+                        # 更新访问统计
+                        cursor.execute("""
+                            UPDATE items
+                            SET query_count = query_count + 1,
+                                last_accessed_at = ?
+                            WHERE id = ?
+                        """, (now, match['id']))
+                        self.conn.commit()
+
+                        return {
+                            'status': 'success',
+                            'match_type': 'keyword_fuzzy',
+                            'item': match['item_name'],
+                            'location': match['location'],
+                            'location_detail': match['location_detail'],
+                            'match_keyword': keyword,
+                            'match_score': match_score,
+                            'message': f"找到相关物品: {match['item_name']}在{match['location']}"
+                        }
+
+        print(f"[数据库] 关键词模糊匹配失败,无匹配物品")
 
         # 未找到
         print(f"[数据库] ✗ 未找到物品: {item}")
@@ -743,7 +848,7 @@ def get_database() -> ItemDatabase:
         with _db_lock:  # 获取锁
             # 第二次检查 (有锁) - 确保只有一个线程初始化
             if _db_instance is None:
-                from youyou.config import config
+                from config import config
                 db_path = config.DATA_DIR / "items.db"
                 _db_instance = ItemDatabase(db_path)
 

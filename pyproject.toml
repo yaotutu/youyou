@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-youyou-server = "youyou.server:main"
+youyou-server = "server:main"
 
 [project.optional-dependencies]
 dev = [
@@ -27,6 +27,9 @@ dev = [
     "black>=23.0.0",
     "ruff>=0.1.0",
 ]
+
+[tool.uv]
+package = true
 
 [build-system]
 requires = ["uv_build>=0.9.2,<0.10.0"]
