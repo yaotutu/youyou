@@ -160,7 +160,7 @@ def _list_all_items_impl() -> Dict[str, Any]:
 # ========== LangChain Tool 封装 ==========
 
 @tool
-def remember_item_location(item: str, location: str) -> str:
+def remember_item_location(item: str, location: str) -> dict:
     """记录物品的位置信息
 
     Args:
@@ -168,62 +168,103 @@ def remember_item_location(item: str, location: str) -> str:
         location: 物品位置
 
     Returns:
-        记录结果的消息(包含 action 信息)
+        包含 action_type 和 data 的字典
     """
     result = _remember_item_location_impl(item, location)
 
     if result.get("status") != "success":
-        return result.get("message", "操作失败")
+        return {
+            "action_type": "error",
+            "data": {"error": result.get("message", "操作失败")},
+            "message": result.get("message", "操作失败")
+        }
 
-    # 根据 action 类型返回不同的消息格式（使用明确的前缀让 LLM 识别）
+    # 根据 action 类型返回不同的消息格式
     action = result.get("action", "unknown")
     item_name = result.get("item", item)
     location_name = result.get("location", location)
 
     if action == "created":
-        # 首次记录
-        return f"✅ 新记录成功: {item_name} 已记录在 {location_name}"
-
+        message = f"✅ 新记录成功：{item_name} 已记录在 {location_name}"
     elif action == "confirmed":
-        # 重复记录（位置相同）
-        return f"⚠️ 重复记录提醒: {item_name} 之前已经记录在 {location_name} 了，位置没有变化"
-
+        message = f"⚠️ 重复记录提醒：{item_name} 之前已经记录在 {location_name} 了，位置没有变化"
     elif action == "moved":
-        # 位置更新
         old_location = result.get("old_location", "")
         new_location = result.get("new_location", location_name)
-        return f"🔄 位置已更新: {item_name} 从 [{old_location}] 移到了 [{new_location}]"
-
+        message = f"🔄 位置已更新：{item_name} 从 [{old_location}] 移到了 [{new_location}]"
     else:
-        # 未知操作类型（fallback）
-        return result.get("message", "操作完成")
+        message = result.get("message", "操作完成")
+
+    return {
+        "action_type": "item_remembered",
+        "data": {
+            "item": item_name,
+            "location": location_name,
+            "action": action
+        },
+        "message": message
+    }
 
 
 @tool
-def query_item_location(item: str) -> str:
+def query_item_location(item: str) -> dict:
     """查询物品的位置
 
     Args:
         item: 要查询的物品名称
 
     Returns:
-        物品位置信息
+        包含 action_type 和 data 的字典
     """
     result = _query_item_location_impl(item)
-    return result.get("message", "查询失败")
+
+    if result.get("status") == "success":
+        return {
+            "action_type": "item_location",
+            "data": {
+                "item": result.get("item", item),
+                "location": result.get("location", ""),
+                "match_type": result.get("match_type", "unknown")
+            },
+            "message": result.get("message", "查询成功")
+        }
+    else:
+        return {
+            "action_type": "error",
+            "data": {"error": result.get("message", "查询失败")},
+            "message": result.get("message", "查询失败")
+        }
 
 
 @tool
-def list_all_items() -> str:
+def list_all_items() -> dict:
     """列出所有已记录的物品及其位置
 
     Returns:
-        所有物品的列表信息
+        包含 action_type 和 data 的字典
     """
     result = _list_all_items_impl()
-    if result["status"] == "success" and result["count"] > 0:
-        items = result["items"]
-        items_text = "\n".join([f"- {item['item']}: {item['location']}" for item in items])
-        return f"共有 {result['count']} 个物品:\n{items_text}"
+
+    if result.get("status") == "success":
+        count = result.get("count", 0)
+        items = result.get("items", [])
+
+        if count > 0:
+            message = f"共有 {count} 个物品"
+        else:
+            message = "没有物品记录"
+
+        return {
+            "action_type": "item_list",
+            "data": {
+                "items": items,
+                "count": count
+            },
+            "message": message
+        }
     else:
-        return result.get("message", "没有物品记录")
+        return {
+            "action_type": "error",
+            "data": {"error": result.get("message", "列出物品失败")},
+            "message": result.get("message", "列出物品失败")
+        }

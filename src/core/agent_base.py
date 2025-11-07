@@ -5,8 +5,10 @@
 from typing import Protocol, Dict, Any, List, runtime_checkable
 from abc import ABC, abstractmethod
 from langchain_core.tools import tool
+import json
 
 from core.logger import logger
+from core.response_types import AgentResponse, Action
 
 
 @runtime_checkable
@@ -23,14 +25,14 @@ class AgentProtocol(Protocol):
         """Agent 功能描述,用于 Supervisor 路由决策"""
         ...
 
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> AgentResponse:
         """处理用户请求
 
         Args:
             query: 用户的原始查询文本
 
         Returns:
-            处理结果文本
+            结构化响应对象
         """
         ...
 
@@ -51,50 +53,103 @@ class BaseAgent(ABC):
         return self._description
 
     @abstractmethod
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> AgentResponse:
         """子类必须实现的核心处理逻辑"""
         pass
 
-    @staticmethod
-    def _extract_response_from_result(result: Dict[str, Any], default: str = "处理失败") -> str:
-        """从 LangChain Agent 返回结果中提取响应文本
+    def _extract_response_from_result(self, result: Dict[str, Any]) -> AgentResponse:
+        """从 LangChain Agent 返回结果中提取结构化响应
 
-        这是一个通用的消息提取方法,适用于所有使用 create_agent 的子 Agent。
+        这个方法会：
+        1. 从所有 ToolMessage 中提取结构化数据（action_type 和 data）
+        2. 提取最终的文本消息
+        3. 构造 AgentResponse 对象
 
         Args:
             result: LangChain Agent 的 invoke 返回值
-            default: 提取失败时的默认返回值
 
         Returns:
-            提取的响应文本
+            结构化响应对象
         """
-        # 提取最后一条消息
+        from langchain_core.messages import ToolMessage
+
         messages = result.get("messages", [])
+        actions = []
+        final_message = ""
+
+        # 1. 提取所有 ToolMessage 中的结构化数据
+        for msg in messages:
+            if isinstance(msg, ToolMessage):
+                try:
+                    # ToolMessage.content 是 JSON 字符串（LangChain 自动序列化的）
+                    tool_data = json.loads(msg.content)
+
+                    # 如果工具返回了 action_type 和 data，则提取
+                    if "action_type" in tool_data and "data" in tool_data:
+                        actions.append(Action(
+                            type=tool_data["action_type"],
+                            data=tool_data["data"]
+                        ))
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    # 工具返回的不是结构化数据，忽略
+                    logger.debug(f"[{self.name}] ⚠️ 工具返回非结构化数据: {msg.content[:100]}")
+                    pass
+
+        # 2. 提取最终回复文本
         if messages:
             last_message = messages[-1]
             if hasattr(last_message, "content"):
-                return last_message.content
+                final_message = last_message.content
             elif isinstance(last_message, dict):
-                return last_message.get("content", default)
+                final_message = last_message.get("content", "")
             else:
-                return default
-        else:
-            return default
+                final_message = str(last_message)
+
+        # 如果没有文本消息，使用默认消息
+        if not final_message:
+            final_message = "处理完成"
+
+        # 3. 如果没有任何 action，生成一个默认的 chat_response
+        if not actions:
+            actions.append(Action(
+                type="chat_response",
+                data={"text": final_message}
+            ))
+
+        return AgentResponse(
+            success=True,
+            agent=self.name,
+            message=final_message,
+            actions=actions
+        )
 
     def as_tool(self):
         """将 Agent 包装为 LangChain Tool
 
         这个方法自动为每个 Agent 生成一个工具函数,
         Supervisor 可以直接使用,无需手写包装代码。
+
+        工具函数返回 dict（包含结构化数据），LangChain 会自动序列化为 JSON。
         """
         agent_instance = self
         agent_description = self.description
 
         @tool
-        def agent_tool(query: str) -> str:
+        def agent_tool(query: str) -> dict:
             """Agent tool generated from BaseAgent"""
-            # 使用闭包捕获 agent_instance
-            return agent_instance.invoke(query)
+            # 调用 Agent 的 invoke 方法，返回 AgentResponse 对象
+            agent_response = agent_instance.invoke(query)
+
+            # 将 AgentResponse 转换为 dict，供 LangChain 序列化
+            return {
+                "agent": agent_response.agent,
+                "message": agent_response.message,
+                "success": agent_response.success,
+                "actions": [
+                    {"type": a.type, "data": a.data}
+                    for a in agent_response.actions
+                ]
+            }
 
         # 动态设置工具的名称和描述
         agent_tool.name = f"{self.name}_tool"

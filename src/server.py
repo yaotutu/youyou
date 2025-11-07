@@ -22,6 +22,7 @@ from core.tag_parser import TagParser
 from core.keyword_router import KeywordRouter
 from core.redirect_detector import detect_redirect
 from core.interaction_logger import get_interaction_logger, InteractionLog
+from core.response_types import AgentResponse
 
 # 配置日志
 logging.basicConfig(
@@ -54,9 +55,168 @@ chat_request_model = api.model('ChatRequest', {
     'message': fields.String(required=True, description='用户消息', example='钥匙放在书桌抽屉里')
 })
 
-chat_response_model = api.model('ChatResponse', {
-    'response': fields.String(description='助手回复', example='好的，我已经记录了：钥匙放在书桌抽屉里。'),
-    'timestamp': fields.String(description='时间戳', example='2025-11-05T12:00:00')
+# Action 模型 - 表示一个结构化操作
+action_model = api.model('Action', {
+    'type': fields.String(
+        required=True,
+        description='操作类型',
+        enum=[
+            'reminder_set',          # CalendarAgent: 提醒已设置
+            'reminder_list',         # CalendarAgent: 提醒列表
+            'reminder_deleted',      # CalendarAgent: 提醒已删除
+            'note_saved',            # NoteAgent: 笔记已保存
+            'note_search_results',   # NoteAgent: 笔记搜索结果
+            'item_remembered',       # ItemAgent: 物品位置已记录
+            'item_location',         # ItemAgent: 物品位置查询结果
+            'item_list',             # ItemAgent: 物品列表
+            'chat_response',         # Supervisor/ChatAgent: 普通对话
+            'error',                 # 通用: 错误
+        ],
+        example='reminder_set'
+    ),
+    'data': fields.Raw(
+        required=True,
+        description='''操作相关的结构化数据，根据 type 不同而不同:
+
+reminder_set (提醒已设置):
+{
+  "title": "开会",
+  "time": "2025-11-08T15:00:00",
+  "reminder_minutes": 15,
+  "duration_minutes": 60,
+  "reminder_id": "rem_xxx"
+}
+
+reminder_list (提醒列表):
+{
+  "reminders": [
+    {
+      "id": "rem_xxx",
+      "title": "开会",
+      "time": "2025-11-08T15:00:00",
+      "reminder_minutes": 15,
+      "duration_minutes": 60
+    }
+  ],
+  "count": 1
+}
+
+reminder_deleted (提醒已删除):
+{
+  "reminder_id": "rem_xxx",
+  "title": "开会"
+}
+
+note_saved (笔记已保存):
+{
+  "note_id": "note_xxx",
+  "content": "完整测试流程记录",
+  "tags": ["测试", "流程"],
+  "github_url": "https://...",
+  "github_metadata": {...}
+}
+
+note_search_results (笔记搜索结果):
+{
+  "results": [
+    {
+      "note_id": "note_xxx",
+      "content": "...",
+      "tags": [...],
+      "relevance_score": 0.95
+    }
+  ],
+  "count": 5
+}
+
+item_remembered (物品位置已记录):
+{
+  "item": "钥匙",
+  "location": "书桌抽屉"
+}
+
+item_location (物品位置查询结果):
+{
+  "item": "钥匙",
+  "location": "书桌抽屉",
+  "confidence": 0.95
+}
+
+item_list (物品列表):
+{
+  "items": [
+    {
+      "item": "钥匙",
+      "location": "书桌抽屉"
+    }
+  ],
+  "count": 3
+}
+
+chat_response (普通对话):
+{
+  "text": "你好！我是YouYou..."
+}
+
+error (错误):
+{
+  "error_type": "validation_error",
+  "details": "..."
+}
+''',
+        example={
+            "title": "开会",
+            "time": "2025-11-08T15:00:00",
+            "reminder_minutes": 15,
+            "duration_minutes": 60,
+            "reminder_id": "rem_abc123"
+        }
+    )
+})
+
+# AgentResponse 模型 - 统一的 API 响应格式
+agent_response_model = api.model('AgentResponse', {
+    'success': fields.Boolean(
+        required=True,
+        description='操作是否成功',
+        example=True
+    ),
+    'agent': fields.String(
+        required=True,
+        description='处理此请求的 Agent 名称',
+        enum=['supervisor', 'note_agent', 'calendar_agent', 'item_agent', 'chat_agent'],
+        example='calendar_agent'
+    ),
+    'message': fields.String(
+        required=True,
+        description='人类可读的消息文本，适合直接展示给用户',
+        example='好的，我已经为你设置了明天下午3点的开会提醒，会提前15分钟通知你。'
+    ),
+    'actions': fields.List(
+        fields.Nested(action_model),
+        required=True,
+        description='操作列表，一次请求可能触发多个操作（如设置提醒同时返回提醒列表）',
+        example=[{
+            "type": "reminder_set",
+            "data": {
+                "title": "开会",
+                "time": "2025-11-08T15:00:00",
+                "reminder_minutes": 15,
+                "duration_minutes": 60,
+                "reminder_id": "rem_abc123"
+            }
+        }]
+    ),
+    'timestamp': fields.String(
+        required=True,
+        description='响应时间戳 (ISO 8601 格式)',
+        example='2025-11-07T14:30:00.123456'
+    ),
+    'error': fields.String(
+        required=False,
+        description='错误信息（仅当 success=false 时存在）',
+        example='无法解析时间格式'
+    )
 })
 
 error_model = api.model('Error', {
@@ -113,18 +273,41 @@ class ChatMessage(Resource):
 
     @ns_chat.doc('send_message')
     @ns_chat.expect(chat_request_model)
-    @ns_chat.response(200, 'Success', chat_response_model)
+    @ns_chat.response(200, 'Success', agent_response_model)
     @ns_chat.response(400, 'Bad Request', error_model)
     @ns_chat.response(500, 'Internal Server Error', error_model)
     def post(self):
         """发送消息给助手
 
         支持的功能：
+        - 设置日历提醒：如 "明天下午3点开会"、"11月20日下午2点面试"
+        - 管理提醒：查看提醒列表、删除提醒
+        - 保存笔记：如 "#note 记录一个想法" 或 "https://github.com/..."
         - 记录物品位置：如 "钥匙放在书桌抽屉里"
         - 查询物品位置：如 "钥匙在哪？"
         - 列出所有物品：如 "我记录了哪些物品？"
-        - 保存笔记：如 "#note 记录一个想法" 或 "https://github.com/..."
         - 日常对话：如 "你好"、"今天天气怎么样"
+
+        返回格式：
+        所有 Agent 返回统一的 AgentResponse 格式，包含：
+        - success: 操作是否成功
+        - agent: 处理此请求的 Agent 名称（supervisor/note_agent/calendar_agent/item_agent）
+        - message: 人类可读的消息文本
+        - actions: 结构化操作列表，每个操作包含 type 和 data
+        - timestamp: 响应时间戳
+        - error: 错误信息（仅失败时）
+
+        actions 字段中的 type 可能包含：
+        - reminder_set: 提醒已设置
+        - reminder_list: 提醒列表
+        - reminder_deleted: 提醒已删除
+        - note_saved: 笔记已保存
+        - note_search_results: 笔记搜索结果
+        - item_remembered: 物品位置已记录
+        - item_location: 物品位置查询结果
+        - item_list: 物品列表
+        - chat_response: 普通对话
+        - error: 错误信息
         """
         # 开始计时和初始化日志数据
         start_time = time.time()
@@ -167,15 +350,15 @@ class ChatMessage(Resource):
                 # 直接路由到指定 Agent（跳过 Supervisor）
                 if parse_result.target_agent == "note_agent":
                     logger.info("🚀 直接调用 NoteAgent (跳过 Supervisor)...")
-                    response = note_agent.invoke(parse_result.clean_message)
-                    logger.info(f"📤 NoteAgent 返回响应 (前200字): {response[:200]}...")
+                    agent_response = note_agent.invoke(parse_result.clean_message)
+                    logger.info(f"📤 NoteAgent 返回响应 (前200字): {agent_response.message[:200]}...")
 
                     # 保存会话历史
                     session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
                     session_mgr.add_interaction(
                         user_id=config.USER_ID,
                         user_input=user_input,
-                        assistant_response=response,
+                        assistant_response=agent_response.message,
                         agent_name="note_agent",
                         async_persist=True
                     )
@@ -183,12 +366,10 @@ class ChatMessage(Resource):
                     logger.info("=" * 80)
 
                     # 记录交互日志
-                    _log_interaction(user_input, response, start_time, log_data)
+                    _log_interaction(user_input, agent_response.message, start_time, log_data)
 
-                    return {
-                        "response": response,
-                        "timestamp": datetime.now().isoformat()
-                    }
+                    # 返回完整的结构化响应
+                    return agent_response.to_dict()
 
             # 2. 检查关键词路由（优先于 Supervisor）
             keyword_result = KeywordRouter.match(user_input)
@@ -209,11 +390,11 @@ class ChatMessage(Resource):
                 # 直接路由到 calendar_agent
                 if keyword_result.target_agent == "calendar_agent":
                     logger.info("🚀 直接调用 CalendarAgent (跳过 Supervisor)...")
-                    response = calendar_agent.invoke(keyword_result.original_message)
-                    logger.info(f"📤 CalendarAgent 返回响应 (前200字): {response[:200]}...")
+                    agent_response = calendar_agent.invoke(keyword_result.original_message)
+                    logger.info(f"📤 CalendarAgent 返回响应 (前200字): {agent_response.message[:200]}...")
 
-                    # 检测是否需要回退
-                    redirect_result = detect_redirect(response)
+                    # 检测是否需要回退 (检查 message 字段)
+                    redirect_result = detect_redirect(agent_response.message)
 
                     if redirect_result.is_redirect:
                         logger.info(f"🔄 CalendarAgent 请求回退")
@@ -271,10 +452,15 @@ class ChatMessage(Resource):
                         # 记录交互日志
                         _log_interaction(user_input, response, start_time, log_data)
 
-                        return {
-                            "response": response,
-                            "timestamp": datetime.now().isoformat()
-                        }
+                        # 构造统一的 AgentResponse 格式(回退到 Supervisor)
+                        from core.response_types import Action
+                        supervisor_response = AgentResponse(
+                            success=True,
+                            agent="supervisor",
+                            message=response,
+                            actions=[Action(type="chat_response", data={"text": response})]
+                        )
+                        return supervisor_response.to_dict()
 
                     # 没有回退，正常处理
                     log_data.update({'final_agent': 'calendar_agent'})
@@ -284,7 +470,7 @@ class ChatMessage(Resource):
                     session_mgr.add_interaction(
                         user_id=config.USER_ID,
                         user_input=user_input,
-                        assistant_response=response,
+                        assistant_response=agent_response.message,
                         agent_name="calendar_agent",
                         async_persist=True
                     )
@@ -292,12 +478,9 @@ class ChatMessage(Resource):
                     logger.info("=" * 80)
 
                     # 记录交互日志
-                    _log_interaction(user_input, response, start_time, log_data)
+                    _log_interaction(user_input, agent_response.message, start_time, log_data)
 
-                    return {
-                        "response": response,
-                        "timestamp": datetime.now().isoformat()
-                    }
+                    return agent_response.to_dict()
 
             # 3. 没有标记也没有关键词匹配，走正常的 Supervisor 路由
             logger.info("🔄 未检测到标记和关键词，使用 Supervisor 路由...")
@@ -338,48 +521,86 @@ class ChatMessage(Resource):
                 msg_content = getattr(msg, 'content', str(msg))[:100] if hasattr(msg, 'content') else str(msg)[:100]
                 logger.info(f"  消息[{i}] {msg_type}: {msg_content}")
 
-            # 提取响应 - 优先从 ToolMessage 提取，其次是 AIMessage
+            # 提取响应 - 检查是否有 ToolMessage（子 agent 调用）
+            from langchain_core.messages import ToolMessage
+            from core.response_types import Action
+
             messages_result = result.get("messages", [])
-            response = ""
+            agent_data = None  # 用于存储从 ToolMessage 解析的数据
+            response_text = ""
+            actual_agent_name = "supervisor"  # 默认值
 
-            if messages_result:
-                # 倒序查找第一个有内容的消息
+            # 查找 ToolMessage（说明 Supervisor 调用了子 agent）
+            tool_message = None
+            for msg in messages_result:
+                if isinstance(msg, ToolMessage):
+                    tool_message = msg
+                    logger.info(f"🎯 找到 ToolMessage: {msg.content[:100]}...")
+                    break
+
+            if tool_message:
+                # 透传模式：解析子 agent 返回的完整数据
+                try:
+                    agent_data = json.loads(tool_message.content)
+                    actual_agent_name = agent_data.get("agent", "supervisor")
+                    response_text = agent_data.get("message", "")
+                    logger.info(f"✅ 透传子 agent 响应: agent={actual_agent_name}")
+                    logger.info(f"📤 返回响应 (前200字): {response_text[:200]}...")
+                except json.JSONDecodeError:
+                    # 如果不是 JSON，回退到文本提取
+                    response_text = tool_message.content
+                    logger.warning("⚠️  ToolMessage.content 不是 JSON 格式，使用文本模式")
+            else:
+                # Supervisor 自处理模式：从 AIMessage 提取文本
+                logger.info("💬 Supervisor 自处理对话（未调用子 agent）")
                 for msg in reversed(messages_result):
-                    msg_type = type(msg).__name__
                     content = getattr(msg, 'content', '')
-
                     if content and content.strip():
-                        response = content
-                        logger.info(f"从 {msg_type} 提取到响应: '{response[:100]}...'")
+                        response_text = content
+                        logger.info(f"从 {type(msg).__name__} 提取到响应: '{response_text[:100]}...'")
                         break
 
-                if not response:
-                    response = "抱歉,我无法处理这个请求"
+                if not response_text:
+                    response_text = "抱歉,我无法处理这个请求"
                     logger.info("所有消息的 content 都为空")
-            else:
-                response = "抱歉,我无法处理这个请求"
-                logger.info("消息列表为空")
 
-            logger.info(f"📤 返回响应 (前200字): {response[:200]}...")
-
-            # 更新会话历史 (内存 + 异步持久化到 Zep)
+            # 更新会话历史
             session_mgr.add_interaction(
                 user_id=user_id,
                 user_input=user_input,
-                assistant_response=response,
-                agent_name="supervisor",
-                async_persist=True  # 异步写入 Zep,不阻塞响应
+                assistant_response=response_text,
+                agent_name=actual_agent_name,  # 使用真实的 agent 名称
+                async_persist=True
             )
-            logger.info("💾 交互已保存到内存并异步持久化到 Zep")
+            logger.info(f"💾 交互已保存: agent={actual_agent_name}")
             logger.info("=" * 80)
 
             # 记录交互日志
-            _log_interaction(user_input, response, start_time, log_data)
+            _log_interaction(user_input, response_text, start_time, log_data)
 
-            return {
-                "response": response,
-                "timestamp": datetime.now().isoformat()
-            }
+            # 构造 AgentResponse
+            if agent_data:
+                # 透传模式：使用子 agent 返回的完整数据
+                actions = [
+                    Action(type=a["type"], data=a["data"])
+                    for a in agent_data.get("actions", [])
+                ]
+                supervisor_response = AgentResponse(
+                    success=agent_data.get("success", True),
+                    agent=actual_agent_name,
+                    message=response_text,
+                    actions=actions
+                )
+            else:
+                # Supervisor 自处理模式：构造简单响应
+                supervisor_response = AgentResponse(
+                    success=True,
+                    agent="supervisor",
+                    message=response_text,
+                    actions=[Action(type="chat_response", data={"text": response_text})]
+                )
+
+            return supervisor_response.to_dict()
 
         except Exception as e:
             logger.error("=" * 80)
@@ -473,7 +694,8 @@ def main():
         return
 
     # 启动 Flask 服务
-    host = "127.0.0.1"
+    # 0.0.0.0 允许所有网络接口访问(包括局域网)
+    host = "0.0.0.0"
     port = 8000
 
     # 检查端口占用

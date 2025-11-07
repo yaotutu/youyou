@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from config import config
 from core.agent_base import BaseAgent, AgentRegistry
 from core.logger import logger
+from core.response_types import AgentResponse
 from agents.note_agent.tools import get_note_agent_tools
 from agents.note_agent.prompts import NOTE_AGENT_SYSTEM_PROMPT
 
@@ -53,14 +54,14 @@ class NoteAgent(BaseAgent):
             system_prompt=NOTE_AGENT_SYSTEM_PROMPT
         )
 
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> AgentResponse:
         """处理笔记相关请求
 
         Args:
             query: 用户的原始查询文本
 
         Returns:
-            处理结果文本
+            结构化响应对象
         """
         logger.info(f"[{self.name}] 📝 处理查询: {query}")
 
@@ -70,19 +71,22 @@ class NoteAgent(BaseAgent):
                 {"messages": [{"role": "user", "content": query}]},
                 config={"recursion_limit": 50, "debug": True}  # 启用调试模式
             )
-            response = self._extract_response_from_result(result)
+            agent_response = self._extract_response_from_result(result)
 
             # 记录迭代次数统计
             if "messages" in result:
                 logger.debug(f"[{self.name}] 📊 总消息数: {len(result['messages'])}")
 
-            logger.info(f"[{self.name}] ✓ 响应: {response[:100]}...")
-            return response
+            logger.info(f"[{self.name}] ✓ 响应: {agent_response.message[:100]}...")
+            return agent_response
 
         except Exception as e:
             error_msg = f"处理失败: {str(e)}"
             logger.error(f"[{self.name}] ✗ {error_msg}")
-            return error_msg
+            return AgentResponse.error_response(
+                agent=self.name,
+                error=error_msg
+            )
 
 
 # 创建并注册 NoteAgent 实例

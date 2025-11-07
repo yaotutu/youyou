@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from config import config
 from core.agent_base import BaseAgent, AgentRegistry
 from core.logger import logger
+from core.response_types import AgentResponse
 from .tools import get_calendar_tools
 from .prompts import CALENDAR_SYSTEM_PROMPT
 
@@ -61,7 +62,7 @@ class CalendarAgent(BaseAgent):
         logger.info(f"[{self.name}] 🔧 可用工具数量: {len(tools)}")
         logger.info(f"[{self.name}] ✓ 初始化完成")
 
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> AgentResponse:
         """处理日历提醒请求"""
         logger.info(f"[{self.name}] 📅 处理查询: {query}")
 
@@ -69,24 +70,31 @@ class CalendarAgent(BaseAgent):
             result = self.agent.invoke(
                 {"messages": [{"role": "user", "content": query}]}
             )
-            response = self._extract_response_from_result(result)
-            logger.info(f"[{self.name}] ✓ 响应: {response[:100]}...")
-            return response
+            agent_response = self._extract_response_from_result(result)
+            logger.info(f"[{self.name}] ✓ 响应: {agent_response.message[:100]}...")
+            return agent_response
         except Exception as e:
             error_msg = f"处理失败: {str(e)}"
             logger.error(f"[{self.name}] ✗ {error_msg}")
 
             # 友好的错误提示
             if "CalDAV" in str(e) or "连接" in str(e):
-                return (
-                    f"❌ CalDAV 服务连接失败：{str(e)}\n\n"
+                error_detail = (
+                    f"CalDAV 服务连接失败：{str(e)}\n\n"
                     "请检查以下配置：\n"
                     "1. .env 文件中的 CALDAV_URL、CALDAV_USERNAME、CALDAV_PASSWORD\n"
                     "2. CalDAV 服务器是否可访问\n"
                     "3. 用户名和密码是否正确（建议使用 App 专用密码）"
                 )
+                return AgentResponse.error_response(
+                    agent=self.name,
+                    error=error_detail
+                )
 
-            return f"❌ {error_msg}"
+            return AgentResponse.error_response(
+                agent=self.name,
+                error=error_msg
+            )
 
 
 # 创建并注册 CalendarAgent 实例

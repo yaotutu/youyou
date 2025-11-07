@@ -5,6 +5,7 @@ from langchain_openai import ChatOpenAI
 from config import config
 from core.agent_base import BaseAgent, AgentRegistry
 from core.logger import logger
+from core.response_types import AgentResponse
 from .prompts import CHAT_SYSTEM_PROMPT
 
 
@@ -48,28 +49,31 @@ class ChatAgent(BaseAgent):
             system_prompt=CHAT_SYSTEM_PROMPT
         )
 
-    def invoke(self, query: str) -> str:
+    def invoke(self, query: str) -> AgentResponse:
         """处理对话请求
 
         Args:
             query: 用户的原始查询文本
 
         Returns:
-            对话回复文本
+            结构化响应对象
         """
         logger.info(f"[{self.name}] 📝 处理查询: {query}")
 
         try:
             result = self.agent.invoke({"messages": [{"role": "user", "content": query}]})
-            response = self._extract_response_from_result(result)
+            agent_response = self._extract_response_from_result(result)
 
-            logger.info(f"[{self.name}] ✓ 响应: {response[:100]}...")
-            return response
+            logger.info(f"[{self.name}] ✓ 响应: {agent_response.message[:100]}...")
+            return agent_response
 
         except Exception as e:
             error_msg = f"处理失败: {str(e)}"
             logger.error(f"[{self.name}] ✗ {error_msg}")
-            return error_msg
+            return AgentResponse.error_response(
+                agent=self.name,
+                error=error_msg
+            )
 
 
 # 创建并注册 ChatAgent 实例

@@ -31,7 +31,7 @@ def _get_caldav_manager() -> CalDAVManager:
 def add_calendar_reminder(
     user_input: str,
     custom_reminder_minutes: Optional[int] = None
-) -> str:
+) -> dict:
     """
     添加日历提醒
 
@@ -40,7 +40,7 @@ def add_calendar_reminder(
         custom_reminder_minutes: 自定义提前提醒时间（分钟），不提供则使用默认值
 
     Returns:
-        添加结果消息
+        包含 action_type 和 data 的字典
     """
     try:
         # 1. 使用 LLM 解析时间
@@ -61,25 +61,38 @@ def add_calendar_reminder(
             description=f"由 YouYou 创建于 {datetime.now().strftime('%Y-%m-%d %H:%M')}"
         )
 
-        return f"""✅ 提醒已添加！
+        # 返回结构化数据
+        formatted_time = reminder.start_time.strftime('%Y-%m-%d %H:%M')
 
-📅 **时间**：{reminder.start_time.strftime('%Y-%m-%d %H:%M')}
-📝 **内容**：{reminder.summary}
-⏰ **提前提醒**：{reminder.reminder_minutes} 分钟
-⏱️ **持续时间**：{reminder.duration_minutes} 分钟
-🔖 **事件ID**：{event_uid}"""
+        return {
+            "action_type": "reminder_set",
+            "data": {
+                "title": reminder.summary,
+                "time": formatted_time,
+                "reminder_minutes": reminder.reminder_minutes,
+                "duration_minutes": reminder.duration_minutes,
+                "reminder_id": event_uid
+            },
+            "message": f"✅ 提醒已添加：{reminder.summary}（{formatted_time}）"
+        }
 
     except ValueError as e:
-        return f"❌ 时间解析失败：{str(e)}\n\n请提供更明确的时间信息，例如：\n- 明天上午8点\n- 下周五下午3点\n- 后天中午12点"
+        return {
+            "action_type": "error",
+            "data": {"error": str(e)},
+            "message": f"❌ 时间解析失败：{str(e)}"
+        }
     except Exception as e:
         error_msg = str(e)
-        if "CalDAV" in error_msg or "连接" in error_msg:
-            return f"❌ CalDAV 连接失败：{error_msg}\n\n请检查 .env 文件中的配置：\n- CALDAV_URL\n- CALDAV_USERNAME\n- CALDAV_PASSWORD"
-        return f"❌ 添加提醒失败：{error_msg}"
+        return {
+            "action_type": "error",
+            "data": {"error": error_msg},
+            "message": f"❌ 添加提醒失败：{error_msg}"
+        }
 
 
 @tool
-def list_upcoming_reminders(days_ahead: int = 7) -> str:
+def list_upcoming_reminders(days_ahead: int = 7) -> dict:
     """
     列出即将到来的提醒
 
@@ -87,57 +100,61 @@ def list_upcoming_reminders(days_ahead: int = 7) -> str:
         days_ahead: 查询未来几天的提醒（默认7天）
 
     Returns:
-        提醒列表
+        包含 action_type 和 data 的字典
     """
     try:
         manager = _get_caldav_manager()
         events = manager.get_upcoming_events(days_ahead)
 
         if not events:
-            return f"📭 未来 {days_ahead} 天内没有提醒"
+            return {
+                "action_type": "reminder_list",
+                "data": {
+                    "reminders": [],
+                    "count": 0,
+                    "days_ahead": days_ahead
+                },
+                "message": f"📭 未来 {days_ahead} 天内没有提醒"
+            }
 
-        # 按日期分组
-        events_by_date = {}
+        # 整理事件数据
+        reminders = []
         for event in events:
             try:
                 start_time = datetime.fromisoformat(event['start_time'].replace('Z', '+00:00'))
-                date_key = start_time.strftime('%Y-%m-%d')
-                if date_key not in events_by_date:
-                    events_by_date[date_key] = []
-                events_by_date[date_key].append({
-                    **event,
-                    'start_dt': start_time
+                reminders.append({
+                    "title": event['summary'],
+                    "time": start_time.strftime('%Y-%m-%d %H:%M'),
+                    "reminder_id": event['uid'],
+                    "date": start_time.strftime('%Y-%m-%d')
                 })
             except Exception:
                 continue
 
-        # 构建响应
-        result = f"📅 **未来 {days_ahead} 天的提醒**（共 {len(events)} 条）\n\n"
+        # 构建人类可读消息
+        message = f"📅 未来 {days_ahead} 天的提醒（共 {len(reminders)} 条）"
 
-        for date_key in sorted(events_by_date.keys()):
-            date_events = events_by_date[date_key]
-            date_obj = datetime.fromisoformat(date_key)
-            date_display = date_obj.strftime('%Y-%m-%d (%A)')
-
-            result += f"### {date_display}\n\n"
-
-            for i, event in enumerate(date_events, 1):
-                time_display = event['start_dt'].strftime('%H:%M')
-                result += f"{i}. **{event['summary']}**\n"
-                result += f"   - 时间：{time_display}\n"
-                result += f"   - ID：`{event['uid']}`\n\n"
-
-        return result
+        return {
+            "action_type": "reminder_list",
+            "data": {
+                "reminders": reminders,
+                "count": len(reminders),
+                "days_ahead": days_ahead
+            },
+            "message": message
+        }
 
     except Exception as e:
         error_msg = str(e)
-        if "CalDAV" in error_msg or "连接" in error_msg:
-            return f"❌ CalDAV 连接失败：{error_msg}\n\n请检查 .env 文件中的配置。"
-        return f"❌ 查询提醒失败：{error_msg}"
+        return {
+            "action_type": "error",
+            "data": {"error": error_msg},
+            "message": f"❌ 查询提醒失败：{error_msg}"
+        }
 
 
 @tool
-def delete_calendar_reminder(event_uid: str) -> str:
+def delete_calendar_reminder(event_uid: str) -> dict:
     """
     删除日历提醒
 
@@ -145,20 +162,33 @@ def delete_calendar_reminder(event_uid: str) -> str:
         event_uid: 事件ID（从 list_upcoming_reminders 获取）
 
     Returns:
-        删除结果
+        包含 action_type 和 data 的字典
     """
     try:
         manager = _get_caldav_manager()
         manager.delete_event(event_uid)
-        return f"✅ 已删除提醒（ID：{event_uid}）"
+
+        return {
+            "action_type": "reminder_deleted",
+            "data": {
+                "reminder_id": event_uid
+            },
+            "message": f"✅ 已删除提醒（ID：{event_uid}）"
+        }
 
     except ValueError as e:
-        return f"❌ 未找到提醒：{str(e)}\n\n请先使用'列出提醒'获取正确的事件ID。"
+        return {
+            "action_type": "error",
+            "data": {"error": str(e)},
+            "message": f"❌ 未找到提醒：{str(e)}"
+        }
     except Exception as e:
         error_msg = str(e)
-        if "CalDAV" in error_msg or "连接" in error_msg:
-            return f"❌ CalDAV 连接失败：{error_msg}\n\n请检查 .env 文件中的配置。"
-        return f"❌ 删除失败：{error_msg}"
+        return {
+            "action_type": "error",
+            "data": {"error": error_msg},
+            "message": f"❌ 删除失败：{error_msg}"
+        }
 
 
 def get_calendar_tools():

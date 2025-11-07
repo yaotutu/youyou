@@ -128,6 +128,98 @@ uv run ruff check src/
   - 发送 HTTP 请求到本地服务端
   - 支持命令：`/help`、`/exit`、`/clear`、`/config`
 
+### 结构化响应系统 (`core/response_types.py`)
+项目采用统一的结构化响应格式，支持丰富的客户端 UI 渲染（卡片、提醒、笔记等）。
+
+**核心设计原则**：
+- **工具返回 dict**：所有 Agent 工具返回包含 `action_type`、`data`、`message` 的字典
+- **LangChain 自动序列化**：LangChain 将工具返回的 dict 序列化为 ToolMessage 中的 JSON
+- **BaseAgent 提取结构化数据**：从 ToolMessage 中提取所有 action，构建 AgentResponse
+- **API 返回统一格式**：所有路由返回相同的结构化 JSON，便于客户端解析
+
+**数据结构**：
+```python
+@dataclass
+class Action:
+    type: ActionType  # reminder_set, item_remembered, note_saved, chat_response 等
+    data: Dict[str, Any]  # 行为相关的结构化数据
+
+@dataclass
+class AgentResponse:
+    success: bool
+    agent: str
+    message: str
+    actions: List[Action]
+    timestamp: str
+    error: Optional[str] = None
+```
+
+**工具返回格式**（示例）：
+```python
+@tool
+def remember_item_location(item: str, location: str) -> dict:
+    # ... 业务逻辑 ...
+    return {
+        "action_type": "item_remembered",
+        "data": {
+            "item": "钥匙",
+            "location": "客厅桌上",
+            "action": "created"
+        },
+        "message": "✅ 新记录成功：钥匙 已记录在 客厅桌上"
+    }
+```
+
+**API 响应格式**：
+```json
+{
+  "success": true,
+  "agent": "item_agent",
+  "message": "已记录物品位置",
+  "timestamp": "2025-11-07T21:23:15.781677",
+  "actions": [
+    {
+      "type": "item_remembered",
+      "data": {
+        "item": "钥匙",
+        "location": "客厅桌上",
+        "action": "created"
+      }
+    },
+    {
+      "type": "chat_response",
+      "data": {
+        "text": "✅ 新记录成功：钥匙 已记录在 客厅桌上"
+      }
+    }
+  ]
+}
+```
+
+**支持的 ActionType**：
+- `reminder_set`: 提醒已设置
+- `reminder_list`: 提醒列表
+- `item_remembered`: 物品已记录
+- `item_location`: 物品位置查询结果
+- `item_list`: 物品列表
+- `note_saved`: 笔记已保存
+- `note_list`: 笔记列表
+- `chat_response`: 普通对话响应
+- `error`: 错误信息
+
+**BaseAgent 处理流程**：
+1. Agent 调用工具，工具返回 dict
+2. LangChain 将 dict 序列化到 ToolMessage
+3. `_extract_response_from_result()` 遍历所有 ToolMessage，提取 action
+4. 如果没有 action，默认添加 `chat_response` action
+5. 返回包含所有 actions 的 AgentResponse
+
+**测试**：
+```bash
+# 快速测试结构化响应系统
+uv run python scripts/test_structured_response_quick.py
+```
+
 ### 路由系统
 项目使用三层路由机制，优先级从高到低：
 
