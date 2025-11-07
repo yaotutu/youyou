@@ -2,7 +2,7 @@
 import sys
 sys.path.insert(0, '/Users/yaotutu/Desktop/code/youyou/src')
 
-from youyou.agents.note_agent.agent import note_agent
+from agents.note_agent.agent import note_agent
 
 
 def test_immich_query_detailed():

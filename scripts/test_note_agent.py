@@ -6,8 +6,8 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
-from youyou.config import Config
-from youyou.agents.note_agent.agent import note_agent
+from config import Config
+from agents.note_agent.agent import note_agent
 
 
 def test_save_note():

@@ -6,6 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 YouYou 是一个基于 LangChain 1.0 的本地智能助手系统，采用多 Agent 架构，支持物品位置记忆和对话功能。
 
+## 目录结构
+
+```
+src/
+  agents/         # Agent 模块
+  core/           # 核心组件
+  tools/          # 工具模块
+  config.py       # 配置管理
+  server.py       # Flask 服务器
+  youyou/         # 包入口（兼容 uv）
+    __init__.py
+scripts/          # 测试和工具脚本
+tests/            # 单元测试
+```
+
+**重要说明**：
+- `src/` 下直接包含主要模块，无需再嵌套 `youyou/` 目录
+- `src/youyou/` 仅用于兼容 uv 的包管理，实际代码在 `src/` 下
+- 导入时直接使用 `from config import ...`，`from agents.xxx import ...`
+
 ## 项目规范
 
 ### 文件组织规则
@@ -59,13 +79,13 @@ uv run ruff check src/
 ## 核心架构
 
 ### 多 Agent 系统
-采用 Supervisor-Worker 模式，三层 Agent 架构：
+采用 Supervisor-Worker 模式，多 Agent 架构：
 
 1. **Supervisor Agent** (`agents/supervisor/`)
    - 使用 `ROUTER_MODEL` 进行意图识别和路由
    - 通过 LangChain 1.0 的 `create_agent` 创建
    - **重要**：必须传入 `ChatOpenAI` 实例，而不是字符串格式的模型名
-   - 调用两个子 Agent 工具：`item_agent_tool` 和 `chat_agent_tool`
+   - 调用子 Agent 工具：`item_agent_tool`、`chat_agent_tool`、`note_agent_tool`、`calendar_agent_tool`
 
 2. **ItemAgent** (`agents/item_agent/`)
    - 使用 `AGENT_MODEL` 处理物品位置相关任务
@@ -75,6 +95,17 @@ uv run ruff check src/
 3. **ChatAgent** (`agents/chat_agent/`)
    - 使用 `AGENT_MODEL` 处理普通对话
    - 无需外部工具，纯对话能力
+
+4. **NoteAgent** (`agents/note_agent/`)
+   - 使用 `AGENT_MODEL` 处理笔记和知识管理
+   - 提供工具：保存笔记、搜索笔记、分析 GitHub 项目
+   - 使用 Qdrant 向量库和 SQLite 数据库
+
+5. **CalendarAgent** (`agents/calendar_agent/`)（新增）
+   - 使用 `AGENT_MODEL` 处理日历提醒相关任务
+   - 提供工具：`add_calendar_reminder`、`list_upcoming_reminders`、`delete_calendar_reminder`
+   - 基于 CalDAV 协议，支持 iCloud、Google Calendar 等主流日历服务
+   - 使用 LLM 进行自然语言时间解析
 
 ### 记忆系统 (`core/memory.py`)
 基于 mem0 和 Qdrant 的向量存储：
@@ -147,7 +178,7 @@ DATA_DIR=./data
 ## 常见开发任务
 
 ### 添加新 Agent
-1. 在 `src/youyou/agents/` 创建新目录
+1. 在 `src/agents/` 创建新目录
 2. 创建 `agent.py`（使用 `create_agent`）、`tools.py`（定义工具）、`prompts.py`（系统提示）
 3. 在 Supervisor 的 `tools.py` 中添加调用新 Agent 的工具
 4. 更新 Supervisor 的系统提示，说明何时使用新 Agent

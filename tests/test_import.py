@@ -5,7 +5,7 @@ os.environ["OPENAI_API_BASE"] = "https://api.openai.com/v1"
 
 print("测试1: 导入 config")
 try:
-    from youyou.config import config
+    from config import config
     print("✓ config 导入成功")
 except Exception as e:
     print(f"✗ config 导入失败: {e}")
@@ -13,7 +13,7 @@ except Exception as e:
 
 print("\n测试2: 导入 item_agent")
 try:
-    from youyou.agents.item_agent import item_agent
+    from agents.item_agent import item_agent
     print(f"✓ item_agent 导入成功: {type(item_agent)}")
 except Exception as e:
     print(f"✗ item_agent 导入失败: {e}")
@@ -23,7 +23,7 @@ except Exception as e:
 
 print("\n测试3: 导入 chat_agent")
 try:
-    from youyou.agents.chat_agent import chat_agent
+    from agents.chat_agent import chat_agent
     print(f"✓ chat_agent 导入成功: {type(chat_agent)}")
 except Exception as e:
     print(f"✗ chat_agent 导入失败: {e}")
@@ -33,7 +33,7 @@ except Exception as e:
 
 print("\n测试4: 导入 supervisor")
 try:
-    from youyou.agents.supervisor import supervisor
+    from agents.supervisor import supervisor
     print(f"✓ supervisor 导入成功: {type(supervisor)}")
 except Exception as e:
     print(f"✗ supervisor 导入失败: {e}")

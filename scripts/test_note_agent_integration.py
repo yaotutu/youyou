@@ -6,7 +6,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
-from youyou.agents.supervisor.agent import supervisor
+from agents.supervisor.agent import supervisor
 
 
 def test_supervisor_routes_to_note_agent():

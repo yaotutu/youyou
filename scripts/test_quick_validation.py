@@ -11,16 +11,16 @@ def test_imports():
 
     try:
         # 测试通用工具导入
-        from youyou.tools.github import GitHubAnalyzer
-        from youyou.tools.storage import NoteStorage, NoteType, NoteUtils
+        from tools.github import GitHubAnalyzer
+        from tools.storage import NoteStorage, NoteType, NoteUtils
         print("✅ 通用工具导入成功")
 
         # 测试 Agent 导入
-        from youyou.agents.note_agent.agent import note_agent
+        from agents.note_agent.agent import note_agent
         print("✅ NoteAgent 导入成功")
 
         # 测试配置
-        from youyou.config import Config
+        from config import Config
         config = Config()
         print("✅ Config 加载成功")
 
@@ -39,9 +39,9 @@ def test_tool_instantiation():
     print("=" * 60)
 
     try:
-        from youyou.config import Config
-        from youyou.tools.github import GitHubAnalyzer
-        from youyou.tools.storage import NoteStorage, NoteUtils
+        from config import Config
+        from tools.github import GitHubAnalyzer
+        from tools.storage import NoteStorage, NoteUtils
 
         config = Config()
 
@@ -70,8 +70,8 @@ def test_url_parsing():
     print("=" * 60)
 
     try:
-        from youyou.config import Config
-        from youyou.tools.github import GitHubAnalyzer
+        from config import Config
+        from tools.github import GitHubAnalyzer
 
         config = Config()
         analyzer = GitHubAnalyzer(config)
@@ -106,7 +106,7 @@ def test_note_query():
     print("=" * 60)
 
     try:
-        from youyou.agents.note_agent.agent import note_agent
+        from agents.note_agent.agent import note_agent
 
         # 简单查询测试
         response = note_agent.invoke("我的笔记本里有多少笔记？")

@@ -2,8 +2,8 @@
 import sys
 sys.path.insert(0, '/Users/yaotutu/Desktop/code/youyou/src')
 
-from youyou.config import Config
-from youyou.agents.note_agent.github_analyzer import GitHubAnalyzer
+from config import Config
+from agents.note_agent.github_analyzer import GitHubAnalyzer
 
 def test_github_analyzer():
     """直接测试 GitHub 分析器"""

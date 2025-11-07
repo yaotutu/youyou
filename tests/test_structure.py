@@ -83,9 +83,9 @@ for module, attr in imports:
 
 # 测试4: 检查 Agent 类型
 print("\n测试4: 检查 Agent 类型")
-from youyou.agents.item_agent import item_agent
-from youyou.agents.chat_agent import chat_agent
-from youyou.agents.supervisor import supervisor
+from agents.item_agent import item_agent
+from agents.chat_agent import chat_agent
+from agents.supervisor import supervisor
 
 expected_type = "CompiledStateGraph"
 for name, agent in [("item_agent", item_agent), ("chat_agent", chat_agent), ("supervisor", supervisor)]:

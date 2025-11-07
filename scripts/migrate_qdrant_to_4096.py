@@ -6,9 +6,9 @@ import sys
 sys.path.insert(0, '/Users/yaotutu/Desktop/code/youyou/src')
 
 from pathlib import Path
-from youyou.config import Config
-from youyou.agents.note_agent.storage import NoteStorage
-from youyou.agents.note_agent.utils import NoteUtils
+from config import Config
+from agents.note_agent.storage import NoteStorage
+from agents.note_agent.utils import NoteUtils
 
 
 def migrate():
