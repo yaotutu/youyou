@@ -9,6 +9,7 @@ from typing import List, Dict, Optional
 import uuid
 
 from config import config
+from core.logger import logger
 
 
 class CalDAVManager:
@@ -41,7 +42,7 @@ class CalDAVManager:
 
     def _connect(self):
         """连接到 CalDAV 服务器"""
-        print("[CalDAV] 🔗 正在连接服务器...")
+        logger.info("[CalDAV] 🔗 正在连接服务器...")
 
         try:
             # 创建 CalDAV 客户端
@@ -59,10 +60,10 @@ class CalDAVManager:
 
             if not calendars:
                 # 如果没有日历，创建一个
-                print("[CalDAV] 📅 未找到日历，正在创建...")
+                logger.info("[CalDAV] 📅 未找到日历，正在创建...")
                 calendar_name = config.CALDAV_CALENDAR_NAME or "YouYou 提醒"
                 self.calendar = principal.make_calendar(name=calendar_name)
-                print(f"[CalDAV] ✅ 已创建日历：{calendar_name}")
+                logger.success(f"[CalDAV] ✅ 已创建日历：{calendar_name}")
             else:
                 # 使用指定日历或第一个日历
                 calendar_name = config.CALDAV_CALENDAR_NAME
@@ -74,7 +75,7 @@ class CalDAVManager:
                 else:
                     self.calendar = calendars[0]
 
-                print(f"[CalDAV] ✅ 已连接到日历：{self.calendar.name}")
+                logger.success(f"[CalDAV] ✅ 已连接到日历：{self.calendar.name}")
 
         except Exception as e:
             raise ConnectionError(f"CalDAV 连接失败：{str(e)}")
@@ -132,7 +133,7 @@ class CalDAVManager:
             # 保存到 CalDAV 服务器
             self.calendar.save_event(cal.to_ical())
 
-            print(f"[CalDAV] ✅ 事件已添加：{event_uid}")
+            logger.success(f"[CalDAV] ✅ 事件已添加：{event_uid}")
             return event_uid
 
         except Exception as e:
@@ -173,7 +174,7 @@ class CalDAVManager:
                         'end_time': dtend.dt.isoformat() if dtend else '',
                     })
                 except Exception as e:
-                    print(f"[CalDAV] ⚠️ 解析事件失败：{e}")
+                    logger.warning(f"[CalDAV] ⚠️ 解析事件失败：{e}")
                     continue
 
             # 按开始时间排序
@@ -201,7 +202,7 @@ class CalDAVManager:
                 ical = event.icalendar_component
                 if str(ical.get('uid', '')) == event_uid:
                     event.delete()
-                    print(f"[CalDAV] ✅ 已删除事件：{event_uid}")
+                    logger.success(f"[CalDAV] ✅ 已删除事件：{event_uid}")
                     return
 
             raise ValueError(f"未找到事件：{event_uid}")
@@ -214,7 +215,7 @@ class CalDAVManager:
         if self.client:
             try:
                 self.client.close()
-                print("[CalDAV] 🔌 连接已关闭")
+                logger.info("[CalDAV] 🔌 连接已关闭")
             except Exception:
                 pass
 

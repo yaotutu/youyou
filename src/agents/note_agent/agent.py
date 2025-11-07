@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 
 from config import config
 from core.agent_base import BaseAgent, AgentRegistry
+from core.logger import logger
 from agents.note_agent.tools import get_note_agent_tools
 from agents.note_agent.prompts import NOTE_AGENT_SYSTEM_PROMPT
 
@@ -61,7 +62,7 @@ class NoteAgent(BaseAgent):
         Returns:
             处理结果文本
         """
-        print(f"[{self.name}] 📝 处理查询: {query}")
+        logger.info(f"[{self.name}] 📝 处理查询: {query}")
 
         try:
             # 增加递归限制到 50，避免复杂任务超出限制
@@ -71,16 +72,16 @@ class NoteAgent(BaseAgent):
             )
             response = self._extract_response_from_result(result)
 
-            # 打印迭代次数统计
+            # 记录迭代次数统计
             if "messages" in result:
-                print(f"[{self.name}] 📊 总消息数: {len(result['messages'])}")
+                logger.debug(f"[{self.name}] 📊 总消息数: {len(result['messages'])}")
 
-            print(f"[{self.name}] ✓ 响应: {response[:100]}...")
+            logger.info(f"[{self.name}] ✓ 响应: {response[:100]}...")
             return response
 
         except Exception as e:
             error_msg = f"处理失败: {str(e)}"
-            print(f"[{self.name}] ✗ {error_msg}")
+            logger.error(f"[{self.name}] ✗ {error_msg}")
             return error_msg
 
 

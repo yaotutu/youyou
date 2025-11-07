@@ -116,6 +116,18 @@ class KeywordRouter:
         """
         matched_keywords = []
 
+        # 0. 排除问候语（最高优先级）
+        # 问候语模式：早上好、晚上好、上午好等
+        GREETING_PATTERN = r'^(早上|上午|下午|晚上|中午|今天|明天|晚安)好'
+        if re.match(GREETING_PATTERN, message):
+            # 明确的问候语，不路由
+            return RoutingResult(
+                matched=False,
+                target_agent=None,
+                original_message=message,
+                matched_keywords=['排除:问候语']
+            )
+
         # 1. 检查显式标记（最高优先级）
         for tag_pattern in cls.CALENDAR_TAGS:
             if re.search(tag_pattern, message):
@@ -159,22 +171,42 @@ class KeywordRouter:
             )
 
         # 只有时间词，没有动作词 - 需要更谨慎
-        # 排除一些明显不是日历的场景
+        # 排除一些明显不是日历的场景（扩充后的列表）
         non_calendar_patterns = [
-            '天气',
-            '温度',
-            '穿什么',
-            '吃什么',
-            '做什么',
-            '怎么样',
-            '如何',
+            # 天气相关
+            '天气', '温度', '气温', '冷', '热',
+            # 疑问词
+            '穿什么', '吃什么', '做什么', '怎么样', '如何', '怎样',
+            '什么', '哪里', '哪儿', '哪个', '哪些', '谁', '为什么',
+            # 活动动词
+            '去', '玩', '看', '逛', '玩儿', '发生', '干', '搞',
+            # 生活场景
+            '电影', '游戏', '节目', '活动', '餐厅', '地方', '好玩',
+            # 问候语相关（防漏网之鱼）
+            '好', '您好', '你好', 'hi', 'hello',
         ]
 
         if time_matched:
             # 检查是否包含排除关键词
             has_non_calendar = any(pattern in message for pattern in non_calendar_patterns)
-            if not has_non_calendar:
-                # 纯时间表达，可能是日历相关
+            if has_non_calendar:
+                # 包含非日历关键词，不路由
+                return RoutingResult(
+                    matched=False,
+                    target_agent=None,
+                    original_message=message,
+                    matched_keywords=[]
+                )
+
+            # 单独时间词需要更严格的检查
+            # 必须满足以下条件之一：
+            # 1. 消息长度足够（>= 5 字，说明有上下文）
+            # 2. 包含具体时间点（如 "8点"、"10:30"）
+            has_time_point = any(re.search(pattern, message) for pattern in cls.CALENDAR_TIME_PATTERNS)
+            message_length = len(message)
+
+            if has_time_point or message_length >= 5:
+                # 有时间点或有足够上下文，可以路由
                 return RoutingResult(
                     matched=True,
                     target_agent='calendar_agent',

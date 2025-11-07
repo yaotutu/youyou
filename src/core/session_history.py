@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from core.zep_memory import get_zep_memory
+from core.logger import logger
 
 
 class SessionHistoryManager:
@@ -36,7 +37,7 @@ class SessionHistoryManager:
         self._refresh_interval = refresh_interval
         self._lock = threading.RLock()
 
-        print(f"[会话历史] 初始化管理器: 最大历史={max_history_length}轮, 刷新间隔={refresh_interval}秒")
+        logger.info(f"[会话历史] 初始化管理器: 最大历史={max_history_length}轮, 刷新间隔={refresh_interval}秒")
 
     def get_history(self, user_id: str, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """获取用户的会话历史
@@ -62,7 +63,7 @@ class SessionHistoryManager:
 
             if should_load:
                 try:
-                    print(f"[会话历史] 从 Zep 加载历史: user_id={user_id}")
+                    logger.info(f"[会话历史] 从 Zep 加载历史: user_id={user_id}")
                     zep = get_zep_memory()
                     messages = zep.get_recent_context(limit=self._max_length * 2)
 
@@ -73,9 +74,9 @@ class SessionHistoryManager:
                     ]
                     self._last_refresh[user_id] = now
 
-                    print(f"[会话历史] ✓ 加载了 {len(self._histories[user_id])} 条消息")
+                    logger.success(f"[会话历史] ✓ 加载了 {len(self._histories[user_id])} 条消息")
                 except Exception as e:
-                    print(f"[会话历史] ⚠️  从 Zep 加载失败: {e}")
+                    logger.warning(f"[会话历史] ⚠️  从 Zep 加载失败: {e}")
                     # 如果加载失败但已有缓存,继续使用缓存
                     if user_id not in self._histories:
                         self._histories[user_id] = []
@@ -109,9 +110,9 @@ class SessionHistoryManager:
                 # 保留最新的 max_messages 条
                 removed = len(self._histories[user_id]) - max_messages
                 self._histories[user_id] = self._histories[user_id][-max_messages:]
-                print(f"[会话历史]   裁剪历史: 移除 {removed} 条旧消息, 保留最新 {max_messages} 条")
+                logger.info(f"[会话历史]   裁剪历史: 移除 {removed} 条旧消息, 保留最新 {max_messages} 条")
 
-            print(f"[会话历史] ✓ 添加到内存: {user_input[:30]}... (当前 {len(self._histories[user_id])} 条)")
+            logger.success(f"[会话历史] ✓ 添加到内存: {user_input[:30]}... (当前 {len(self._histories[user_id])} 条)")
 
         # 异步持久化到 Zep
         if async_persist:
@@ -125,7 +126,7 @@ class SessionHistoryManager:
                         metadata={"timestamp": datetime.now().isoformat()}
                     )
                 except Exception as e:
-                    print(f"[会话历史] ⚠️  异步持久化到 Zep 失败: {e}")
+                    logger.warning(f"[会话历史] ⚠️  异步持久化到 Zep 失败: {e}")
 
             thread = threading.Thread(target=_persist, daemon=True)
             thread.start()
@@ -139,7 +140,7 @@ class SessionHistoryManager:
         with self._lock:
             if user_id in self._histories:
                 del self._histories[user_id]
-                print(f"[会话历史] ✓ 清除内存历史: user_id={user_id}")
+                logger.success(f"[会话历史] ✓ 清除内存历史: user_id={user_id}")
 
             if user_id in self._last_refresh:
                 del self._last_refresh[user_id]

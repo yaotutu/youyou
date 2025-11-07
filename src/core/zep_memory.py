@@ -10,6 +10,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 from config import config
+from core.logger import logger
 
 
 class ZepMemoryManager:
@@ -37,7 +38,7 @@ class ZepMemoryManager:
             if self._initialized:
                 return
 
-            print("\n[Zep记忆] 🚀 初始化全局记忆中枢 (Zep 3.0)...")
+            logger.info("\n[Zep记忆] 🚀 初始化全局记忆中枢 (Zep 3.0)...")
 
             try:
                 # 判断使用 Cloud 还是本地部署
@@ -46,24 +47,24 @@ class ZepMemoryManager:
                     from zep_cloud import Zep
                     self._client = Zep(api_key=config.ZEP_API_KEY)
                     self._use_cloud = True
-                    print("[Zep记忆] ✓ 使用 Zep Cloud 3.0")
+                    logger.success("[Zep记忆] ✓ 使用 Zep Cloud 3.0")
                 else:
                     # 本地部署 (使用 zep-python SDK)
                     from zep_python import ZepClient
                     zep_url = getattr(config, 'ZEP_API_URL', 'http://localhost:8000')
                     self._client = ZepClient(base_url=zep_url)
                     self._use_cloud = False
-                    print(f"[Zep记忆] ✓ 使用本地 Zep: {zep_url}")
+                    logger.success(f"[Zep记忆] ✓ 使用本地 Zep: {zep_url}")
 
                 # 确保 user 和 thread 存在
                 self._ensure_user_and_thread()
 
                 self._initialized = True
-                print("[Zep记忆] ✓ 初始化完成\n")
+                logger.success("[Zep记忆] ✓ 初始化完成\n")
 
             except Exception as e:
-                print(f"[Zep记忆] ✗ 初始化失败: {e}")
-                print("[Zep记忆] ⚠️  将在无记忆模式下运行")
+                logger.error(f"[Zep记忆] ✗ 初始化失败: {e}")
+                logger.warning("[Zep记忆] ⚠️  将在无记忆模式下运行")
                 import traceback
                 traceback.print_exc()
                 self._client = None
@@ -79,31 +80,34 @@ class ZepMemoryManager:
                 # 1. 创建或获取 user
                 try:
                     self._client.user.get(user_id=config.USER_ID)
-                    print(f"[Zep记忆] ✓ User 已存在: {config.USER_ID}")
-                except:
+                    logger.success(f"[Zep记忆] ✓ User 已存在: {config.USER_ID}")
+                except Exception:
+                    # User 不存在，创建新 user
                     self._client.user.add(
                         user_id=config.USER_ID,
                         email=f"{config.USER_ID}@youyou.local",
                         metadata={"app": "youyou", "created_at": datetime.now().isoformat()}
                     )
-                    print(f"[Zep记忆] ✓ 创建新 user: {config.USER_ID}")
+                    logger.success(f"[Zep记忆] ✓ 创建新 user: {config.USER_ID}")
 
                 # 2. 创建或获取 thread
                 try:
                     self._client.thread.get(thread_id=config.USER_ID)
-                    print(f"[Zep记忆] ✓ Thread 已存在: {config.USER_ID}")
-                except:
+                    logger.success(f"[Zep记忆] ✓ Thread 已存在: {config.USER_ID}")
+                except Exception:
+                    # Thread 不存在，创建新 thread
                     # Zep 3.0 API: 只需要 thread_id 和 user_id
                     self._client.thread.create(
                         thread_id=config.USER_ID,
                         user_id=config.USER_ID
                     )
-                    print(f"[Zep记忆] ✓ 创建新 thread: {config.USER_ID}")
+                    logger.success(f"[Zep记忆] ✓ 创建新 thread: {config.USER_ID}")
             else:
                 # 本地 Zep - 使用 memory/session API
                 try:
                     self._client.memory.get_session(config.USER_ID)
-                except:
+                except Exception:
+                    # Session 不存在，创建新 session
                     from zep_python.memory import Session
                     self._client.memory.add_session(
                         Session(
@@ -115,9 +119,9 @@ class ZepMemoryManager:
                             }
                         )
                     )
-                    print(f"[Zep记忆] ✓ 创建新 session: {config.USER_ID}")
+                    logger.success(f"[Zep记忆] ✓ 创建新 session: {config.USER_ID}")
         except Exception as e:
-            print(f"[Zep记忆] ⚠️  创建 user/thread 时出错: {e}")
+            logger.warning(f"[Zep记忆] ⚠️  创建 user/thread 时出错: {e}")
 
     def add_message(self, role: str, content: str,
                     metadata: Optional[Dict[str, Any]] = None) -> bool:
@@ -167,11 +171,11 @@ class ZepMemoryManager:
                     ]
                 )
 
-            print(f"[Zep记忆] ✓ 记录消息 ({role}): {content[:50]}...")
+            logger.success(f"[Zep记忆] ✓ 记录消息 ({role}): {content[:50]}...")
             return True
 
         except Exception as e:
-            print(f"[Zep记忆] ✗ 添加消息失败: {e}")
+            logger.error(f"[Zep记忆] ✗ 添加消息失败: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -222,11 +226,11 @@ class ZepMemoryManager:
                     ]
                 )
 
-            print(f"[Zep记忆] ✓ 记录交互: {user_input[:30]}... -> {assistant_response[:30]}...")
+            logger.success(f"[Zep记忆] ✓ 记录交互: {user_input[:30]}... -> {assistant_response[:30]}...")
             return True
 
         except Exception as e:
-            print(f"[Zep记忆] ✗ 记录交互失败: {e}")
+            logger.error(f"[Zep记忆] ✗ 记录交互失败: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -249,7 +253,7 @@ class ZepMemoryManager:
             return []
 
         try:
-            print(f"[Zep记忆] 🔍 语义搜索: {query}")
+            logger.debug(f"[Zep记忆] 🔍 语义搜索: {query}")
 
             # Zep 3.0: 搜索功能可能需要使用 Graph API
             # 这里我们简单地获取最近的消息并在客户端进行过滤
@@ -281,7 +285,7 @@ class ZepMemoryManager:
             if not query_keywords:
                 query_keywords = [query]
 
-            print(f"[Zep记忆]   搜索关键词: {query_keywords}")
+            logger.debug(f"[Zep记忆]   搜索关键词: {query_keywords}")
 
             # 计算每条消息的匹配分数
             scored_messages = []
@@ -307,11 +311,11 @@ class ZepMemoryManager:
             scored_messages.sort(key=lambda x: x['score'], reverse=True)
             memories = scored_messages[:limit]
 
-            print(f"[Zep记忆] ✓ 找到 {len(memories)} 条相关记忆")
+            logger.success(f"[Zep记忆] ✓ 找到 {len(memories)} 条相关记忆")
             return memories
 
         except Exception as e:
-            print(f"[Zep记忆] ✗ 搜索失败: {e}")
+            logger.error(f"[Zep记忆] ✗ 搜索失败: {e}")
             import traceback
             traceback.print_exc()
             return []
@@ -351,11 +355,11 @@ class ZepMemoryManager:
                     'metadata': getattr(msg, 'metadata', {})
                 })
 
-            print(f"[Zep记忆] ✓ 获取最近 {len(messages)} 条上下文")
+            logger.success(f"[Zep记忆] ✓ 获取最近 {len(messages)} 条上下文")
             return messages
 
         except Exception as e:
-            print(f"[Zep记忆] ✗ 获取上下文失败: {e}")
+            logger.error(f"[Zep记忆] ✗ 获取上下文失败: {e}")
             import traceback
             traceback.print_exc()
             return []
@@ -381,13 +385,13 @@ class ZepMemoryManager:
 
             if source and hasattr(source, 'summary') and source.summary:
                 summary = source.summary
-                print(f"[Zep记忆] ✓ 获取会话摘要: {summary[:100]}...")
+                logger.success(f"[Zep记忆] ✓ 获取会话摘要: {summary[:100]}...")
                 return summary
 
             return None
 
         except Exception as e:
-            print(f"[Zep记忆] ✗ 获取摘要失败: {e}")
+            logger.error(f"[Zep记忆] ✗ 获取摘要失败: {e}")
             return None
 
     def extract_facts(self) -> List[str]:
@@ -411,13 +415,13 @@ class ZepMemoryManager:
 
             if source and hasattr(source, 'facts') and source.facts:
                 facts = [fact.fact if hasattr(fact, 'fact') else str(fact) for fact in source.facts]
-                print(f"[Zep记忆] ✓ 提取到 {len(facts)} 条事实")
+                logger.success(f"[Zep记忆] ✓ 提取到 {len(facts)} 条事实")
                 return facts
 
             return []
 
         except Exception as e:
-            print(f"[Zep记忆] ✗ 提取事实失败: {e}")
+            logger.error(f"[Zep记忆] ✗ 提取事实失败: {e}")
             return []
 
 

@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 
 from config import config
 from core.agent_base import BaseAgent, AgentRegistry
+from core.logger import logger
 from .prompts import CHAT_SYSTEM_PROMPT
 
 
@@ -56,18 +57,18 @@ class ChatAgent(BaseAgent):
         Returns:
             对话回复文本
         """
-        print(f"[{self.name}] 📝 处理查询: {query}")
+        logger.info(f"[{self.name}] 📝 处理查询: {query}")
 
         try:
             result = self.agent.invoke({"messages": [{"role": "user", "content": query}]})
             response = self._extract_response_from_result(result)
 
-            print(f"[{self.name}] ✓ 响应: {response[:100]}...")
+            logger.info(f"[{self.name}] ✓ 响应: {response[:100]}...")
             return response
 
         except Exception as e:
             error_msg = f"处理失败: {str(e)}"
-            print(f"[{self.name}] ✗ {error_msg}")
+            logger.error(f"[{self.name}] ✗ {error_msg}")
             return error_msg
 
 

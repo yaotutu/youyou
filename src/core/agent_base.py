@@ -6,6 +6,8 @@ from typing import Protocol, Dict, Any, List, runtime_checkable
 from abc import ABC, abstractmethod
 from langchain_core.tools import tool
 
+from core.logger import logger
+
 
 @runtime_checkable
 class AgentProtocol(Protocol):
@@ -123,7 +125,7 @@ class AgentRegistry:
             raise TypeError(f"{agent} 必须实现 AgentProtocol 接口")
 
         cls._agents[agent.name] = agent
-        print(f"[注册中心] ✓ 注册 Agent: {agent.name}")
+        logger.info(f"[注册中心] ✓ 注册 Agent: {agent.name}")
 
     @classmethod
     def get_all_agents(cls) -> List[AgentProtocol]:

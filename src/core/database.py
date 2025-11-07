@@ -10,6 +10,8 @@ from typing import Dict, Any, List, Optional
 import re
 import threading
 
+from core.logger import logger
+
 
 def get_timestamp() -> str:
     """获取当前时间戳 (ISO 8601 with timezone)"""
@@ -150,12 +152,12 @@ class ItemDatabase:
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA synchronous=NORMAL")
 
-        print(f"[数据库] 初始化数据库: {self.db_path}")
+        logger.info(f"[数据库] 初始化数据库: {self.db_path}")
 
         # 创建表结构
         self._create_tables()
 
-        print("[数据库] ✓ 数据库初始化完成")
+        logger.success("[数据库] ✓ 数据库初始化完成")
 
     def _create_tables(self):
         """创建数据库表结构"""
@@ -345,7 +347,8 @@ class ItemDatabase:
                     alias_lower = alias.lower().strip()
                     if query_name in alias_lower or alias_lower in query_name:
                         return True
-            except:
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                # JSON 解析失败或数据类型错误，忽略别名检查
                 pass
 
         return False
@@ -375,9 +378,9 @@ class ItemDatabase:
             aliases = extract_aliases(item)
             now = get_timestamp()
 
-            print(f"[数据库] 记录物品: {item} -> {location}")
-            print(f"[数据库]   规范化名称: {normalized}")
-            print(f"[数据库]   别名: {aliases}")
+            logger.info(f"[数据库] 记录物品: {item} -> {location}")
+            logger.info(f"[数据库]   规范化名称: {normalized}")
+            logger.info(f"[数据库]   别名: {aliases}")
 
             cursor = self.conn.cursor()
 
@@ -391,7 +394,7 @@ class ItemDatabase:
 
         if existing:
             existing_dict = dict(existing)
-            print(f"[数据库] 物品已存在, ID: {existing_dict['id']}")
+            logger.info(f"[数据库] 物品已存在, ID: {existing_dict['id']}")
 
             # 位置相同 -> 仅更新访问时间
             if existing_dict['location'] == location:
@@ -403,7 +406,7 @@ class ItemDatabase:
                 """, (now, existing_dict['id']))
                 self.conn.commit()
 
-                print(f"[数据库] ✓ 位置相同,仅更新访问时间")
+                logger.success(f"[数据库] ✓ 位置相同,仅更新访问时间")
                 return {
                     'status': 'success',
                     'action': 'confirmed',
@@ -437,7 +440,7 @@ class ItemDatabase:
 
                 self.conn.commit()
 
-                print(f"[数据库] ✓ 位置已更新: {old_location} -> {location}")
+                logger.success(f"[数据库] ✓ 位置已更新: {old_location} -> {location}")
                 return {
                     'status': 'success',
                     'action': 'moved',
@@ -471,7 +474,7 @@ class ItemDatabase:
 
             self.conn.commit()
 
-            print(f"[数据库] ✓ 新建记录, ID: {item_id}")
+            logger.success(f"[数据库] ✓ 新建记录, ID: {item_id}")
             return {
                 'status': 'success',
                 'action': 'created',
@@ -500,8 +503,8 @@ class ItemDatabase:
         normalized = normalize_item_name(item)
         now = get_timestamp()
 
-        print(f"[数据库] 🔍 查询物品: {item}")
-        print(f"[数据库]   规范化名称: {normalized}")
+        logger.debug(f"[数据库] 🔍 查询物品: {item}")
+        logger.debug(f"[数据库]   规范化名称: {normalized}")
 
         cursor = self.conn.cursor()
 
@@ -514,7 +517,7 @@ class ItemDatabase:
         result = cursor.fetchone()
         if result:
             result_dict = dict(result)
-            print(f"[数据库] ✓ 精确匹配成功, ID: {result_dict['id']}")
+            logger.success(f"[数据库] ✓ 精确匹配成功, ID: {result_dict['id']}")
 
             # 更新访问统计
             cursor.execute("""
@@ -537,7 +540,7 @@ class ItemDatabase:
             }
 
         # 级别2: 别名匹配 (JSON 解析 + 逐一比对) + 验证
-        print(f"[数据库] 精确匹配失败,尝试别名匹配...")
+        logger.debug(f"[数据库] 精确匹配失败,尝试别名匹配...")
 
         # 获取所有未删除的物品
         cursor.execute("""
@@ -563,7 +566,7 @@ class ItemDatabase:
                         # 双向匹配: normalized 在 alias 中，或 alias 在 normalized 中
                         if normalized in alias_normalized or alias_normalized in normalized:
                             matched_items.append(item_dict)
-                            print(f"[数据库]   别名匹配候选: {item_dict['item_name']} (别名: {alias})")
+                            logger.debug(f"[数据库]   别名匹配候选: {item_dict['item_name']} (别名: {alias})")
                             break
                 except json.JSONDecodeError:
                     continue
@@ -572,7 +575,7 @@ class ItemDatabase:
         if matched_items:
             for match in matched_items:
                 if self._verify_item_name(match, item):
-                    print(f"[数据库] ✓ 别名匹配成功(已验证): {match['item_name']}")
+                    logger.success(f"[数据库] ✓ 别名匹配成功(已验证): {match['item_name']}")
 
                     # 更新访问统计
                     cursor.execute("""
@@ -592,10 +595,10 @@ class ItemDatabase:
                         'message': f"找到相似物品: {match['item_name']}在{match['location']}"
                     }
 
-            print(f"[数据库] 别名匹配验证失败,无匹配物品")
+            logger.debug(f"[数据库] 别名匹配验证失败,无匹配物品")
 
         # 级别3: FTS5 全文搜索 (带验证)
-        print(f"[数据库] 别名匹配失败,尝试全文搜索...")
+        logger.debug(f"[数据库] 别名匹配失败,尝试全文搜索...")
         try:
             cursor.execute("""
                 SELECT items.* FROM items_fts
@@ -613,7 +616,7 @@ class ItemDatabase:
                 for row in results:
                     match = dict(row)
                     if self._verify_item_name(match, item):
-                        print(f"[数据库] ✓ 全文搜索成功(已验证): {match['item_name']}")
+                        logger.success(f"[数据库] ✓ 全文搜索成功(已验证): {match['item_name']}")
 
                         # 更新访问统计
                         cursor.execute("""
@@ -633,14 +636,14 @@ class ItemDatabase:
                             'message': f"可能是: {match['item_name']}在{match['location']}"
                         }
 
-                print(f"[数据库] 全文搜索验证失败,无匹配物品")
+                logger.debug(f"[数据库] 全文搜索验证失败,无匹配物品")
         except Exception as e:
-            print(f"[数据库] 全文搜索失败: {e}")
+            logger.error(f"[数据库] 全文搜索失败: {e}")
 
         # 级别4: LIKE 中文模糊匹配 (关键词子串)
-        print(f"[数据库] 全文搜索失败,尝试关键词模糊匹配...")
+        logger.debug(f"[数据库] 全文搜索失败,尝试关键词模糊匹配...")
         keywords = extract_keywords(item)
-        print(f"[数据库]   提取关键词: {keywords[:5]}")  # 只显示前5个
+        logger.debug(f"[数据库]   提取关键词: {keywords[:5]}")  # 只显示前5个
 
         for keyword in keywords:
             if len(keyword) < 2:  # 跳过太短的关键词
@@ -665,7 +668,7 @@ class ItemDatabase:
                         # 计算匹配度: 匹配的关键词数量
                         match_score = sum(1 for kw in keywords if kw in match['normalized_name'])
 
-                        print(f"[数据库] ✓ 关键词模糊匹配成功 (关键词: '{keyword}', 匹配度: {match_score}): {match['item_name']}")
+                        logger.success(f"[数据库] ✓ 关键词模糊匹配成功 (关键词: '{keyword}', 匹配度: {match_score}): {match['item_name']}")
 
                         # 更新访问统计
                         cursor.execute("""
@@ -687,10 +690,10 @@ class ItemDatabase:
                             'message': f"找到相关物品: {match['item_name']}在{match['location']}"
                         }
 
-        print(f"[数据库] 关键词模糊匹配失败,无匹配物品")
+        logger.debug(f"[数据库] 关键词模糊匹配失败,无匹配物品")
 
         # 未找到
-        print(f"[数据库] ✗ 未找到物品: {item}")
+        logger.error(f"[数据库] ✗ 未找到物品: {item}")
         return {
             'status': 'not_found',
             'item': item,
@@ -736,7 +739,7 @@ class ItemDatabase:
                 'query_count': row_dict['query_count']
             })
 
-        print(f"[数据库] 列出所有物品: 共 {len(items)} 个")
+        logger.info(f"[数据库] 列出所有物品: 共 {len(items)} 个")
 
         return {
             'status': 'success',
@@ -845,7 +848,7 @@ class ItemDatabase:
         """关闭数据库连接"""
         if self.conn:
             self.conn.close()
-            print("[数据库] 连接已关闭")
+            logger.info("[数据库] 连接已关闭")
 
 
 # 全局数据库实例 (延迟初始化)

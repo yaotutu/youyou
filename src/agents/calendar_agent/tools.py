@@ -3,6 +3,7 @@ from langchain_core.tools import tool
 from typing import Optional
 from datetime import datetime
 
+from core.logger import logger
 from .time_parser import parse_time_from_natural_language
 from .caldav_client import CalDAVManager
 from config import config
@@ -43,7 +44,7 @@ def add_calendar_reminder(
     """
     try:
         # 1. 使用 LLM 解析时间
-        print(f"[calendar_agent] 📝 解析用户输入: {user_input}")
+        logger.info(f"[calendar_agent] 📝 解析用户输入: {user_input}")
         reminder = parse_time_from_natural_language(user_input)
 
         # 2. 覆盖提醒时间（如果指定）

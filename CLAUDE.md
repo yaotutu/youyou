@@ -119,25 +119,84 @@ uv run ruff check src/
 
 ### 客户端-服务端架构
 - **服务端** (`server.py`): Flask HTTP 服务
-  - `/health`: 健康检查
-  - `/chat`: 处理对话请求（POST JSON）
-  - `/config`: 获取配置信息
+  - `/docs`: Swagger UI 交互式文档
+  - `/api/v1/chat/message`: 处理对话请求（POST JSON）
+  - `/api/v1/system/config`: 获取配置信息
+  - `/api/v1/system/health`: 健康检查
+  - 端口占用处理：服务启动时自动检测并终止占用 8000 端口的进程
 - **客户端** (`cli.py`): 基于 prompt-toolkit 和 rich 的 CLI 界面
   - 发送 HTTP 请求到本地服务端
   - 支持命令：`/help`、`/exit`、`/clear`、`/config`
+
+### 路由系统
+项目使用三层路由机制，优先级从高到低：
+
+1. **标记路由** (`core/tag_parser.py`)
+   - 显式标记直接路由，跳过 Supervisor
+   - NoteAgent 标记：`#note`、`#笔记`、`/note`、`/笔记`
+   - GitHub URL 自动识别
+
+2. **关键词路由** (`core/keyword_router.py`)
+   - 基于关键词快速路由，无需 LLM 调用
+   - CalendarAgent 关键词：提醒、日历、日程、时间表达式等
+   - 提高响应速度和准确率
+
+3. **Supervisor 路由**
+   - 使用 `ROUTER_MODEL` 进行意图识别
+   - 处理其他未被标记/关键词匹配的请求
+
+### Zep 全局记忆系统 (`core/zep_memory.py`)
+基于 Zep 3.0 API 的全局记忆中枢：
+- 支持 Zep Cloud 和本地部署两种模式
+- 延迟初始化设计：首次使用时自动初始化
+- 记录所有用户-助手交互
+- 提供语义搜索能力
+- 配置项：
+  - Cloud 模式：需要 `ZEP_API_KEY` 环境变量
+  - 本地模式：使用 `ZEP_API_URL`（默认 http://localhost:8000）
+
+### 会话历史管理 (`core/session_history.py`)
+内存级会话历史缓存，减少远程调用：
+- 首次访问从 Zep 加载历史
+- 后续请求使用内存缓存
+- 支持定期刷新策略
+- 异步写入 Zep 持久化
+- 可配置最大历史长度和刷新间隔
 
 ## 配置管理
 
 ### 环境变量 (`.env`)
 必须先复制 `.env.example` 并配置：
+
+**必需配置**：
 ```bash
-OPENAI_API_BASE=https://api.siliconflow.cn/v1  # 或其他兼容 OpenAI 的端点
+# OpenAI API 配置（兼容 OpenAI 格式的任何端点）
+OPENAI_API_BASE=https://api.siliconflow.cn/v1
 OPENAI_API_KEY=your_api_key_here
-ROUTER_MODEL=Pro/deepseek-ai/DeepSeek-V3.1-Terminus
-AGENT_MODEL=Pro/deepseek-ai/DeepSeek-V3.1-Terminus
-EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B
-USER_ID=default
-DATA_DIR=./data
+
+# 模型配置
+ROUTER_MODEL=Pro/deepseek-ai/DeepSeek-V3.1-Terminus  # 用于意图路由
+AGENT_MODEL=Pro/deepseek-ai/DeepSeek-V3.1-Terminus   # 用于 Agent 处理
+EMBEDDING_MODEL=Qwen/Qwen3-Embedding-8B              # 用于向量嵌入
+
+# 系统配置
+USER_ID=default  # 用户标识
+DATA_DIR=./data  # 数据存储目录
+```
+
+**可选配置**：
+```bash
+# Zep 记忆系统（二选一）
+ZEP_API_KEY=your_zep_cloud_api_key        # Zep Cloud 模式
+# 或
+ZEP_API_URL=http://localhost:8000         # 本地部署模式
+
+# CalDAV 日历配置（用于 CalendarAgent）
+CALDAV_URL=https://caldav.icloud.com      # CalDAV 服务器地址
+CALDAV_USERNAME=your_email@example.com    # 用户名（通常是邮箱）
+CALDAV_PASSWORD=your_app_specific_password # 密码（建议使用专用密码）
+CALDAV_CALENDAR_NAME=YouYou 提醒          # 默认日历名称（可选）
+CALDAV_DEFAULT_REMINDER_MINUTES=10        # 默认提醒时间（分钟）
 ```
 
 ### Config 类 (`config.py`)
@@ -188,14 +247,74 @@ DATA_DIR=./data
 2. 将工具添加到 Agent 的 `create_agent()` 调用中
 3. 更新 Agent 的系统提示，说明如何使用新工具
 
-### 调试记忆系统
-记忆系统初始化日志以 `[记忆系统]` 开头，包含：
-- Qdrant 路径
-- 使用的 LLM 和嵌入模型
-- API Base URL
-- 初始化成功/失败状态
+### 调试和日志
 
+**日志系统** (`core/logger.py`):
+- 基于 `loguru` 实现统一日志管理
+- 日志输出到 `logs/youyou_server.log`
+- 自动轮转（500MB 大小限制）
+- 支持控制台和文件双输出
+- 自动拦截标准 logging（Flask 等库）
 
+**日志前缀约定**:
+- `[记忆系统]`: ItemAgent 记忆系统日志
+- `[Zep记忆]`: Zep 全局记忆日志
+- `[会话历史]`: 会话历史管理日志
+- `[路由]`: 路由系统日志
+- `[NoteAgent]`: 笔记 Agent 日志
+- `[CalendarAgent]`: 日历 Agent 日志
 
-# 重要规则
-- 所有的test脚本必须放在scripts目录下。
+**常见调试场景**:
+```bash
+# 查看实时日志
+tail -f logs/youyou_server.log
+
+# 测试特定 Agent（scripts/ 目录下的测试脚本）
+uv run python scripts/test_note_agent.py
+uv run python scripts/test_calendar_agent.py
+uv run python scripts/test_item_agent_tools.py
+
+# 检查数据库状态
+uv run python scripts/check_db.py
+```
+
+## 工具模块
+
+### NoteAgent 工具 (`tools/storage/`)
+- **note_storage.py**: SQLite + Qdrant 双存储
+  - 结构化数据存储在 SQLite
+  - 向量嵌入存储在 Qdrant
+  - 支持混合搜索（关键词 + 语义）
+- **utils.py**: 文本处理工具
+  - 标签提取
+  - 文本摘要
+  - 语义去重
+
+### GitHub 工具 (`tools/github/`)
+- **analyzer.py**: GitHub 项目分析
+  - 自动提取项目元信息（stars、forks、语言等）
+  - 解析 README
+  - 支持完整 URL 和简写格式（owner/repo）
+
+## 重要规则和约定
+
+### 文件组织
+- **所有测试脚本必须放在 `scripts/` 目录**
+- 根目录只允许 `README.md` 和 `CLAUDE.md`
+- 其他 .md 文件不允许出现在根目录
+- 项目配置了 post-response hook 自动检查这些规范
+
+### 导入路径
+由于扁平化目录结构，导入时直接使用：
+```python
+from config import config
+from agents.supervisor import supervisor
+from core.zep_memory import get_zep_memory
+```
+
+### Agent 设计模式
+每个 Agent 目录包含：
+- `agent.py`: Agent 实现（使用 `create_agent`）
+- `tools.py`: 工具函数定义（使用 `@tool` 装饰器）
+- `prompts.py`: 系统提示词
+- `__init__.py`: 导出接口

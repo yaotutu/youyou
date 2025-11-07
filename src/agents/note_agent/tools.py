@@ -8,6 +8,7 @@ from typing import List, Optional
 from langchain_core.tools import tool
 
 from config import Config
+from core.logger import logger
 from tools.storage import NoteStorage, NoteType, NoteUtils
 from tools.github import GitHubAnalyzer
 
@@ -24,7 +25,7 @@ def _get_config() -> Config:
     global _config
     if _config is None:
         _config = Config()
-        print("[NoteAgent Tools] 配置加载完成")
+        logger.debug("[NoteAgent Tools] 配置加载完成")
     return _config
 
 
@@ -34,7 +35,7 @@ def _get_storage() -> NoteStorage:
     if _storage is None:
         config = _get_config()
         _storage = NoteStorage(config)
-        print("[NoteAgent Tools] 存储实例已创建（单例）")
+        logger.debug("[NoteAgent Tools] 存储实例已创建（单例）")
     return _storage
 
 
@@ -44,7 +45,7 @@ def _get_github_analyzer() -> GitHubAnalyzer:
     if _github_analyzer is None:
         config = _get_config()
         _github_analyzer = GitHubAnalyzer(config)
-        print("[NoteAgent Tools] GitHub 分析器已创建（单例）")
+        logger.debug("[NoteAgent Tools] GitHub 分析器已创建（单例）")
     return _github_analyzer
 
 
@@ -54,7 +55,7 @@ def _get_utils() -> NoteUtils:
     if _utils is None:
         config = _get_config()
         _utils = NoteUtils(config)
-        print("[NoteAgent Tools] 工具实例已创建（单例）")
+        logger.debug("[NoteAgent Tools] 工具实例已创建（单例）")
     return _utils
 
 
@@ -134,29 +135,29 @@ def analyze_github_project(github_url: str, custom_tags: Optional[List[str]] = N
         分析和保存结果
     """
     try:
-        print(f"[analyze_github_project] 开始分析: {github_url}")
+        logger.info(f"[analyze_github_project] 开始分析: {github_url}")
 
         # 步骤 1: 初始化组件
         try:
             analyzer = _get_github_analyzer()
             storage = _get_storage()
             utils = _get_utils()
-            print(f"[analyze_github_project] ✓ 组件初始化完成")
+            logger.debug(f"[analyze_github_project] ✓ 组件初始化完成")
         except Exception as e:
             error_msg = f"❌ 初始化失败：{type(e).__name__}: {str(e)}"
-            print(f"[analyze_github_project] {error_msg}")
+            logger.error(f"[analyze_github_project] {error_msg}")
             return error_msg
 
         # 步骤 2: 分析 GitHub 项目
-        print(f"[analyze_github_project] 开始分析项目...")
+        logger.info(f"[analyze_github_project] 开始分析项目...")
         result = analyzer.analyze_repo(github_url)
 
         if not result:
             error_msg = f"❌ 无法分析项目：{github_url}\n请检查 URL 是否正确"
-            print(f"[analyze_github_project] {error_msg}")
+            logger.error(f"[analyze_github_project] {error_msg}")
             return error_msg
 
-        print(f"[analyze_github_project] ✓ GitHub 分析完成: {result['metadata']['full_name']}")
+        logger.success(f"[analyze_github_project] ✓ GitHub 分析完成: {result['metadata']['full_name']}")
 
         # 构建标题和内容
         metadata = result["metadata"]
@@ -201,16 +202,16 @@ def analyze_github_project(github_url: str, custom_tags: Optional[List[str]] = N
 
         # 步骤 3: 生成笔记 ID
         note_id = utils.generate_note_id(github_url)
-        print(f"[analyze_github_project] ✓ 笔记 ID: {note_id}")
+        logger.debug(f"[analyze_github_project] ✓ 笔记 ID: {note_id}")
 
         # 步骤 4: 生成嵌入向量
-        print(f"[analyze_github_project] 生成向量...")
+        logger.debug(f"[analyze_github_project] 生成向量...")
         embedding_text = f"{title}\n{analysis['summary']}\n{' '.join(analysis['tech_stack'])}"
         try:
             vector = utils.generate_embedding(embedding_text)
-            print(f"[analyze_github_project] ✓ 向量生成完成")
+            logger.debug(f"[analyze_github_project] ✓ 向量生成完成")
         except Exception as e:
-            print(f"[analyze_github_project] ⚠️ 向量生成失败: {e}，将不使用向量")
+            logger.warning(f"[analyze_github_project] ⚠️ 向量生成失败: {e}，将不使用向量")
             vector = None
 
         # 步骤 5: 准备元数据
@@ -229,7 +230,7 @@ def analyze_github_project(github_url: str, custom_tags: Optional[List[str]] = N
         }
 
         # 步骤 6: 保存笔记
-        print(f"[analyze_github_project] 保存笔记到数据库...")
+        logger.info(f"[analyze_github_project] 保存笔记到数据库...")
         try:
             note = storage.save_note(
                 note_id=note_id,
@@ -240,7 +241,7 @@ def analyze_github_project(github_url: str, custom_tags: Optional[List[str]] = N
                 tags=tags,
                 vector=vector if vector else None
             )
-            print(f"[analyze_github_project] ✓ 笔记保存成功")
+            logger.success(f"[analyze_github_project] ✓ 笔记保存成功")
         except RuntimeError as e:
             if "already accessed by another instance" in str(e):
                 error_msg = f"""❌ 数据库访问冲突
@@ -257,7 +258,7 @@ def analyze_github_project(github_url: str, custom_tags: Optional[List[str]] = N
 - 技术栈: {', '.join(analysis['tech_stack'])}
 
 数据未保存，请稍后重试。"""
-                print(f"[analyze_github_project] {error_msg}")
+                logger.error(f"[analyze_github_project] {error_msg}")
                 return error_msg
             else:
                 raise  # 其他 RuntimeError 继续抛出
@@ -277,9 +278,7 @@ def analyze_github_project(github_url: str, custom_tags: Optional[List[str]] = N
 
     except Exception as e:
         error_detail = f"❌ 分析失败：{str(e)}"
-        print(f"[analyze_github_project] {error_detail}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"[analyze_github_project] {error_detail}")
         return error_detail
 
 

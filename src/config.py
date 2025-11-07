@@ -5,6 +5,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+from core.logger import logger
 
 # 加载 .env 文件
 load_dotenv()
@@ -46,7 +47,7 @@ class Config:
     def validate(cls) -> bool:
         """验证配置是否有效"""
         if not cls.OPENAI_API_KEY:
-            print("警告: 未设置 OPENAI_API_KEY 环境变量")
+            logger.warning("未设置 OPENAI_API_KEY 环境变量")
             return False
 
         # 确保数据目录存在
@@ -60,18 +61,18 @@ class Config:
         masked_key = '*' * 10 + cls.OPENAI_API_KEY[-4:] if cls.OPENAI_API_KEY else '未设置'
         masked_zep_key = '*' * 10 + cls.ZEP_API_KEY[-4:] if cls.ZEP_API_KEY else '未设置'
         masked_caldav_password = '*' * 10 + cls.CALDAV_PASSWORD[-4:] if cls.CALDAV_PASSWORD else '未设置'
-        print("当前配置:")
-        print(f"  API Base: {cls.OPENAI_API_BASE}")
-        print(f"  API Key: {masked_key}")
-        print(f"  路由模型: {cls.ROUTER_MODEL}")
-        print(f"  Agent模型: {cls.AGENT_MODEL}")
-        print(f"  用户ID: {cls.USER_ID}")
-        print(f"  数据目录: {cls.DATA_DIR}")
-        print(f"  Zep API Key: {masked_zep_key}")
-        print(f"  Zep API URL: {cls.ZEP_API_URL}")
-        print(f"  CalDAV URL: {cls.CALDAV_URL if cls.CALDAV_URL else '未设置'}")
-        print(f"  CalDAV 用户名: {cls.CALDAV_USERNAME if cls.CALDAV_USERNAME else '未设置'}")
-        print(f"  CalDAV 密码: {masked_caldav_password}")
+        logger.info("当前配置:")
+        logger.info(f"  API Base: {cls.OPENAI_API_BASE}")
+        logger.info(f"  API Key: {masked_key}")
+        logger.info(f"  路由模型: {cls.ROUTER_MODEL}")
+        logger.info(f"  Agent模型: {cls.AGENT_MODEL}")
+        logger.info(f"  用户ID: {cls.USER_ID}")
+        logger.info(f"  数据目录: {cls.DATA_DIR}")
+        logger.info(f"  Zep API Key: {masked_zep_key}")
+        logger.info(f"  Zep API URL: {cls.ZEP_API_URL}")
+        logger.info(f"  CalDAV URL: {cls.CALDAV_URL if cls.CALDAV_URL else '未设置'}")
+        logger.info(f"  CalDAV 用户名: {cls.CALDAV_USERNAME if cls.CALDAV_USERNAME else '未设置'}")
+        logger.info(f"  CalDAV 密码: {masked_caldav_password}")
 
 
 # 全局配置实例

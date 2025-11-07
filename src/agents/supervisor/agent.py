@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 
 from config import config
 from core.agent_base import AgentRegistry
+from core.logger import logger
 from .prompts import SUPERVISOR_SYSTEM_PROMPT
 
 # 导入所有子 Agent 以触发注册
@@ -23,7 +24,7 @@ def create_supervisor():
     Returns:
         配置好的 Supervisor Agent
     """
-    print("\n[Supervisor] 🚀 初始化...")
+    logger.info("[Supervisor] 🚀 初始化...")
 
     # 创建模型实例
     supervisor_model = ChatOpenAI(
@@ -36,11 +37,11 @@ def create_supervisor():
     # 从注册中心自动获取所有子 Agent 的工具
     tools = AgentRegistry.get_all_tools()
 
-    print(f"[Supervisor] 📋 已注册的 Agent:")
+    logger.info("[Supervisor] 📋 已注册的 Agent:")
     for agent in AgentRegistry.get_all_agents():
-        print(f"  - {agent.name}: {agent.description.split('.')[0]}...")
+        logger.info(f"  - {agent.name}: {agent.description.split('.')[0]}...")
 
-    print(f"[Supervisor] 🔧 可用工具数量: {len(tools)}")
+    logger.info(f"[Supervisor] 🔧 可用工具数量: {len(tools)}")
 
     # 创建 Supervisor Agent
     supervisor = create_agent(
@@ -49,7 +50,7 @@ def create_supervisor():
         system_prompt=SUPERVISOR_SYSTEM_PROMPT
     )
 
-    print("[Supervisor] ✓ 初始化完成\n")
+    logger.info("[Supervisor] ✓ 初始化完成")
     return supervisor
 
 

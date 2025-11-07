@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 
 from config import config
 from core.agent_base import BaseAgent, AgentRegistry
+from core.logger import logger
 from .tools import get_calendar_tools
 from .prompts import CALENDAR_SYSTEM_PROMPT
 
@@ -35,12 +36,12 @@ class CalendarAgent(BaseAgent):
     日历提醒管理的处理结果"""
         )
 
-        print(f"[{self.name}] 🚀 正在初始化...")
+        logger.info(f"[{self.name}] 🚀 正在初始化...")
 
         # 检查 CalDAV 配置
         if not config.CALDAV_URL:
-            print(f"[{self.name}] ⚠️ 警告：未配置 CalDAV，日历功能将不可用")
-            print(f"[{self.name}] 💡 请在 .env 中配置 CALDAV_URL、CALDAV_USERNAME 和 CALDAV_PASSWORD")
+            logger.warning(f"[{self.name}] ⚠️ 警告：未配置 CalDAV，日历功能将不可用")
+            logger.info(f"[{self.name}] 💡 请在 .env 中配置 CALDAV_URL、CALDAV_USERNAME 和 CALDAV_PASSWORD")
 
         self.model = ChatOpenAI(
             model=config.AGENT_MODEL,
@@ -57,23 +58,23 @@ class CalendarAgent(BaseAgent):
             system_prompt=CALENDAR_SYSTEM_PROMPT
         )
 
-        print(f"[{self.name}] 🔧 可用工具数量: {len(tools)}")
-        print(f"[{self.name}] ✓ 初始化完成")
+        logger.info(f"[{self.name}] 🔧 可用工具数量: {len(tools)}")
+        logger.info(f"[{self.name}] ✓ 初始化完成")
 
     def invoke(self, query: str) -> str:
         """处理日历提醒请求"""
-        print(f"[{self.name}] 📅 处理查询: {query}")
+        logger.info(f"[{self.name}] 📅 处理查询: {query}")
 
         try:
             result = self.agent.invoke(
                 {"messages": [{"role": "user", "content": query}]}
             )
             response = self._extract_response_from_result(result)
-            print(f"[{self.name}] ✓ 响应: {response[:100]}...")
+            logger.info(f"[{self.name}] ✓ 响应: {response[:100]}...")
             return response
         except Exception as e:
             error_msg = f"处理失败: {str(e)}"
-            print(f"[{self.name}] ✗ {error_msg}")
+            logger.error(f"[{self.name}] ✗ {error_msg}")
 
             # 友好的错误提示
             if "CalDAV" in str(e) or "连接" in str(e):

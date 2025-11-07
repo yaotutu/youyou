@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from langchain_openai import ChatOpenAI
 
 from config import Config
+from core.logger import logger
 
 
 class GitHubAnalyzer:
@@ -126,7 +127,7 @@ class GitHubAnalyzer:
         # 使用新的 URL 提取逻辑
         repo_info = self._extract_repo_info(github_url)
         if not repo_info:
-            print(f"[GitHub 分析器] ❌ 无法解析 URL: {github_url}")
+            logger.error(f"[GitHub 分析器] ❌ 无法解析 URL: {github_url}")
             return None
 
         owner = repo_info["owner"]
@@ -136,9 +137,9 @@ class GitHubAnalyzer:
         original_url = repo_info["original_url"]
 
         # 日志输出
-        print(f"[GitHub 分析器] 📥 原始 URL: {original_url}")
-        print(f"[GitHub 分析器] 🔍 提取仓库: {owner}/{repo}")
-        print(f"[GitHub 分析器] 📋 资源类型: {resource_type}" + (f" (路径: {path})" if path else ""))
+        logger.info(f"[GitHub 分析器] 📥 原始 URL: {original_url}")
+        logger.debug(f"[GitHub 分析器] 🔍 提取仓库: {owner}/{repo}")
+        logger.info(f"[GitHub 分析器] 📋 资源类型: {resource_type}" + (f" (路径: {path})" if path else ""))
 
         # 获取仓库元数据
         metadata = self._fetch_repo_metadata(owner, repo)
@@ -218,7 +219,7 @@ class GitHubAnalyzer:
                 "homepage": data.get("homepage", "")
             }
         except Exception as e:
-            print(f"[GitHub 分析器] 获取元数据失败: {e}")
+            logger.error(f"[GitHub 分析器] 获取元数据失败: {e}")
             return None
 
     def _fetch_readme(self, owner: str, repo: str) -> str:
@@ -297,7 +298,7 @@ README 内容:
 
             return analysis
         except Exception as e:
-            print(f"[GitHub 分析器] LLM 分析失败: {e}")
+            logger.error(f"[GitHub 分析器] LLM 分析失败: {e}")
             # 返回默认结构
             return {
                 "tech_stack": [metadata.get("language", "未知")] if metadata.get("language") else [],

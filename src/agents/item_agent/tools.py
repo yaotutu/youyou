@@ -7,6 +7,7 @@ from langchain_core.tools import tool
 
 from core.database import get_database
 from core.zep_memory import get_zep_memory
+from core.logger import logger
 from config import config
 
 
@@ -26,7 +27,7 @@ def _remember_item_location_impl(item: str, location: str) -> Dict[str, Any]:
         包含操作结果的字典
     """
     try:
-        print(f"[物品工具] 记录物品位置: {item} -> {location}")
+        logger.info(f"[物品工具] 记录物品位置: {item} -> {location}")
 
         # 使用数据库存储
         db = get_database()
@@ -36,24 +37,22 @@ def _remember_item_location_impl(item: str, location: str) -> Dict[str, Any]:
             user_id=config.USER_ID
         )
 
-        print(f"[物品工具] 数据库返回: {result}")
+        logger.debug(f"[物品工具] 数据库返回: {result}")
 
         if result.get("status") == "success":
             action = result.get("action", "unknown")
-            print(f"[物品工具] ✓ 成功记录物品位置 (action: {action})")
+            logger.success(f"[物品工具] ✓ 成功记录物品位置 (action: {action})")
             return result
         else:
             error_msg = result.get('message', '未知错误')
-            print(f"[物品工具] ✗ 记录失败: {error_msg}")
+            logger.error(f"[物品工具] ✗ 记录失败: {error_msg}")
             return {
                 "status": "error",
                 "message": f"记录失败: {error_msg}"
             }
 
     except Exception as e:
-        print(f"[物品工具] ✗ 异常: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"[物品工具] ✗ 异常: {e}")
         return {"status": "error", "message": f"记录失败: {str(e)}"}
 
 
@@ -75,7 +74,7 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
         包含查询结果的字典
     """
     try:
-        print(f"\n[物品工具] 🔍 查询物品位置: {item}")
+        logger.info(f"[物品工具] 🔍 查询物品位置: {item}")
 
         # 级别 1-4: 使用数据库查询 (四级策略)
         db = get_database()
@@ -84,14 +83,14 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
             user_id=config.USER_ID
         )
 
-        print(f"[物品工具] 数据库返回: {result}")
+        logger.debug(f"[物品工具] 数据库返回: {result}")
 
         if result.get("status") == "success":
             match_type = result.get("match_type", "unknown")
-            print(f"[物品工具] ✓ 查询成功 (match_type: {match_type})")
+            logger.success(f"[物品工具] ✓ 查询成功 (match_type: {match_type})")
             return result
         elif result.get("status") == "not_found":
-            print(f"[物品工具] ℹ SQLite 未找到物品，尝试 Zep 兜底查询...")
+            logger.info(f"[物品工具] ℹ SQLite 未找到物品，尝试 Zep 兜底查询...")
 
             # 级别 5: Zep 语义搜索兜底
             try:
@@ -102,7 +101,7 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
                 )
 
                 if memories:
-                    print(f"[物品工具] ✓ Zep 找到 {len(memories)} 条相关记忆")
+                    logger.success(f"[物品工具] ✓ Zep 找到 {len(memories)} 条相关记忆")
 
                     # 提取最相关的记忆
                     best_memory = memories[0]
@@ -117,10 +116,10 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
                         "confidence": "low"  # 标记为低置信度
                     }
                 else:
-                    print(f"[物品工具] ℹ Zep 也未找到相关记忆")
+                    logger.info(f"[物品工具] ℹ Zep 也未找到相关记忆")
 
             except Exception as zep_error:
-                print(f"[物品工具] ⚠️  Zep 查询失败: {zep_error}")
+                logger.warning(f"[物品工具] ⚠️  Zep 查询失败: {zep_error}")
 
             # 所有方法都失败
             return result
@@ -131,9 +130,7 @@ def _query_item_location_impl(item: str) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"[物品工具] ✗ 异常: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"[物品工具] ✗ 异常: {e}")
         return {"status": "error", "message": f"查询失败: {str(e)}"}
 
 
@@ -145,20 +142,18 @@ def _list_all_items_impl() -> Dict[str, Any]:
         包含物品列表的字典
     """
     try:
-        print(f"[物品工具] 列出所有物品")
+        logger.info("[物品工具] 列出所有物品")
 
         # 使用数据库查询
         db = get_database()
         result = db.list_all_items(user_id=config.USER_ID)
 
-        print(f"[物品工具] 数据库返回: 共 {result.get('count', 0)} 个物品")
+        logger.info(f"[物品工具] 数据库返回: 共 {result.get('count', 0)} 个物品")
 
         return result
 
     except Exception as e:
-        print(f"[物品工具] ✗ 异常: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"[物品工具] ✗ 异常: {e}")
         return {"status": "error", "message": f"列出物品失败: {str(e)}"}
 
 

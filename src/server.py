@@ -3,6 +3,8 @@ import logging
 import socket
 import subprocess
 import sys
+import time
+import json
 from datetime import datetime
 from typing import Dict, Any
 
@@ -19,6 +21,7 @@ from core.session_history import get_session_manager
 from core.tag_parser import TagParser
 from core.keyword_router import KeywordRouter
 from core.redirect_detector import detect_redirect
+from core.interaction_logger import get_interaction_logger, InteractionLog
 
 # 配置日志
 logging.basicConfig(
@@ -76,6 +79,34 @@ health_model = api.model('Health', {
 })
 
 
+def _log_interaction(user_input: str, response: str, start_time: float, log_data: dict):
+    """记录交互日志的辅助函数"""
+    try:
+        response_time_ms = int((time.time() - start_time) * 1000)
+
+        log_entry = InteractionLog(
+            user_id=config.USER_ID,
+            timestamp=datetime.now().isoformat(),
+            user_input=user_input,
+            input_length=len(user_input),
+            response_text=response,
+            response_length=len(response) if response else 0,
+            response_time_ms=response_time_ms,
+            routing_stage=log_data.get('routing_stage', 'unknown'),
+            routing_matched=log_data.get('routing_matched', False),
+            routing_keywords=log_data.get('routing_keywords'),
+            target_agent=log_data.get('target_agent'),
+            redirect_occurred=log_data.get('redirect_occurred', False),
+            redirect_reason=log_data.get('redirect_reason'),
+            final_agent=log_data.get('final_agent'),
+            status=log_data.get('status', 'success')
+        )
+
+        get_interaction_logger().log(log_entry)
+    except Exception as e:
+        logger.error(f"[交互日志] 记录失败: {e}")
+
+
 @ns_chat.route('/message')
 class ChatMessage(Resource):
     """对话接口"""
@@ -95,6 +126,10 @@ class ChatMessage(Resource):
         - 保存笔记：如 "#note 记录一个想法" 或 "https://github.com/..."
         - 日常对话：如 "你好"、"今天天气怎么样"
         """
+        # 开始计时和初始化日志数据
+        start_time = time.time()
+        log_data = {}
+
         try:
             data = api.payload
             user_input = data.get('message', '')
@@ -120,6 +155,15 @@ class ChatMessage(Resource):
                 logger.info(f"🎯 目标 Agent: {parse_result.target_agent}")
                 logger.info(f"📝 清理后的消息: {parse_result.clean_message}")
 
+                # 记录标记路由信息
+                log_data.update({
+                    'routing_stage': 'tag',
+                    'routing_matched': True,
+                    'routing_keywords': json.dumps([f"标记:{parse_result.tag_type}"], ensure_ascii=False),
+                    'target_agent': parse_result.target_agent,
+                    'final_agent': parse_result.target_agent
+                })
+
                 # 直接路由到指定 Agent（跳过 Supervisor）
                 if parse_result.target_agent == "note_agent":
                     logger.info("🚀 直接调用 NoteAgent (跳过 Supervisor)...")
@@ -138,6 +182,9 @@ class ChatMessage(Resource):
                     logger.info("💾 交互已保存 (标记路由)")
                     logger.info("=" * 80)
 
+                    # 记录交互日志
+                    _log_interaction(user_input, response, start_time, log_data)
+
                     return {
                         "response": response,
                         "timestamp": datetime.now().isoformat()
@@ -150,6 +197,14 @@ class ChatMessage(Resource):
                 logger.info(f"🔑 检测到关键词路由")
                 logger.info(f"🎯 目标 Agent: {keyword_result.target_agent}")
                 logger.info(f"📌 匹配的关键词: {', '.join(keyword_result.matched_keywords)}")
+
+                # 记录关键词路由信息
+                log_data.update({
+                    'routing_stage': 'keyword',
+                    'routing_matched': True,
+                    'routing_keywords': json.dumps(keyword_result.matched_keywords, ensure_ascii=False),
+                    'target_agent': keyword_result.target_agent
+                })
 
                 # 直接路由到 calendar_agent
                 if keyword_result.target_agent == "calendar_agent":
@@ -164,6 +219,14 @@ class ChatMessage(Resource):
                         logger.info(f"🔄 CalendarAgent 请求回退")
                         logger.info(f"📝 回退原因: {redirect_result.reason}")
                         logger.info("🔄 重新使用 Supervisor 路由...")
+
+                        # 记录回退信息
+                        log_data.update({
+                            'redirect_occurred': True,
+                            'redirect_reason': redirect_result.reason,
+                            'final_agent': 'supervisor',
+                            'status': 'redirect'
+                        })
 
                         # 获取会话历史
                         session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
@@ -205,12 +268,17 @@ class ChatMessage(Resource):
                         logger.info("💾 交互已保存 (回退路由)")
                         logger.info("=" * 80)
 
+                        # 记录交互日志
+                        _log_interaction(user_input, response, start_time, log_data)
+
                         return {
                             "response": response,
                             "timestamp": datetime.now().isoformat()
                         }
 
                     # 没有回退，正常处理
+                    log_data.update({'final_agent': 'calendar_agent'})
+
                     # 保存会话历史
                     session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
                     session_mgr.add_interaction(
@@ -223,6 +291,9 @@ class ChatMessage(Resource):
                     logger.info("💾 交互已保存 (关键词路由)")
                     logger.info("=" * 80)
 
+                    # 记录交互日志
+                    _log_interaction(user_input, response, start_time, log_data)
+
                     return {
                         "response": response,
                         "timestamp": datetime.now().isoformat()
@@ -230,6 +301,14 @@ class ChatMessage(Resource):
 
             # 3. 没有标记也没有关键词匹配，走正常的 Supervisor 路由
             logger.info("🔄 未检测到标记和关键词，使用 Supervisor 路由...")
+
+            # 记录 Supervisor 路由信息
+            log_data.update({
+                'routing_stage': 'supervisor',
+                'routing_matched': False,
+                'target_agent': 'supervisor',
+                'final_agent': 'supervisor'
+            })
 
             # 获取会话历史管理器
             session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
@@ -294,6 +373,9 @@ class ChatMessage(Resource):
             logger.info("💾 交互已保存到内存并异步持久化到 Zep")
             logger.info("=" * 80)
 
+            # 记录交互日志
+            _log_interaction(user_input, response, start_time, log_data)
+
             return {
                 "response": response,
                 "timestamp": datetime.now().isoformat()
@@ -304,6 +386,15 @@ class ChatMessage(Resource):
             logger.error(f"❌ 处理请求时出错: {e}")
             logger.error("详细错误信息:", exc_info=True)
             logger.error("=" * 80)
+
+            # 记录错误日志
+            log_data.update({
+                'status': 'error',
+                'error_message': str(e)
+            })
+            error_response = f"处理请求时出错: {str(e)}"
+            _log_interaction(user_input if 'user_input' in locals() else '', error_response, start_time, log_data)
+
             return {"error": str(e)}, 500
 
 

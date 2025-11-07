@@ -7,6 +7,7 @@ from typing import List
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 
 from config import Config
+from core.logger import logger
 
 
 class NoteUtils:
@@ -77,7 +78,7 @@ class NoteUtils:
             return tags[:max_tags]
 
         except Exception as e:
-            print(f"[笔记工具] 提取标签失败: {e}")
+            logger.error(f"[笔记工具] 提取标签失败: {e}")
             return []
 
     def generate_embedding(self, text: str) -> List[float]:
@@ -94,7 +95,7 @@ class NoteUtils:
             vector = self.embeddings.embed_query(text)
             return vector
         except Exception as e:
-            print(f"[笔记工具] 生成向量失败: {e}")
+            logger.error(f"[笔记工具] 生成向量失败: {e}")
             return []
 
     @staticmethod

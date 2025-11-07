@@ -11,6 +11,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
 from config import Config
+from core.logger import logger
 
 
 class NoteType(str, Enum):
@@ -75,22 +76,22 @@ class NoteStorage:
         qdrant_path.mkdir(exist_ok=True)
 
         try:
-            print(f"[笔记存储] 正在初始化 Qdrant: {qdrant_path}")
+            logger.info(f"[笔记存储] 正在初始化 Qdrant: {qdrant_path}")
             self._qdrant_client = QdrantClient(path=str(qdrant_path))
             self._init_qdrant()
-            print(f"[笔记存储] ✓ Qdrant 初始化成功")
+            logger.success(f"[笔记存储] ✓ Qdrant 初始化成功")
         except RuntimeError as e:
             if "already accessed by another instance" in str(e):
-                print(f"[笔记存储] ⚠️ Qdrant 已被其他进程占用，向量搜索功能将不可用")
-                print(f"[笔记存储] 提示: 关闭其他 youyou-server 进程可解决此问题")
+                logger.warning(f"[笔记存储] ⚠️ Qdrant 已被其他进程占用，向量搜索功能将不可用")
+                logger.warning(f"[笔记存储] 提示: 关闭其他 youyou-server 进程可解决此问题")
                 self._qdrant_client = None  # 设为 None，后续跳过向量操作
             else:
                 raise  # 其他错误继续抛出
 
         self._initialized = True
-        print(f"[笔记存储] 初始化完成（向量搜索: {'启用' if self._qdrant_client else '禁用'}）")
-        print(f"  - SQLite: {self._db_path}")
-        print(f"  - Qdrant: {qdrant_path}")
+        logger.success(f"[笔记存储] 初始化完成（向量搜索: {'启用' if self._qdrant_client else '禁用'}）")
+        logger.info(f"  - SQLite: {self._db_path}")
+        logger.info(f"  - Qdrant: {qdrant_path}")
 
     def _init_database(self):
         """初始化数据库表"""
@@ -180,11 +181,11 @@ class NoteStorage:
                         )
                     ]
                 )
-                print(f"[笔记存储] ✓ 向量已保存到 Qdrant")
+                logger.success(f"[笔记存储] ✓ 向量已保存到 Qdrant")
             except Exception as e:
-                print(f"[笔记存储] ⚠️ 向量保存失败: {e}（笔记本身已保存到 SQLite）")
+                logger.warning(f"[笔记存储] ⚠️ 向量保存失败: {e}（笔记本身已保存到 SQLite）")
         elif vector:
-            print(f"[笔记存储] ⚠️ Qdrant 不可用，跳过向量保存")
+            logger.warning(f"[笔记存储] ⚠️ Qdrant 不可用，跳过向量保存")
 
         return Note(
             id=note_id,
