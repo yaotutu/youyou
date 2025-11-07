@@ -13,9 +13,12 @@ from flask_cors import CORS
 from config import config
 from agents.supervisor import supervisor
 from agents.note_agent import note_agent
+from agents.calendar_agent import calendar_agent
 from core.zep_memory import get_zep_memory
 from core.session_history import get_session_manager
 from core.tag_parser import TagParser
+from core.keyword_router import KeywordRouter
+from core.redirect_detector import detect_redirect
 
 # 配置日志
 logging.basicConfig(
@@ -140,8 +143,93 @@ class ChatMessage(Resource):
                         "timestamp": datetime.now().isoformat()
                     }
 
-            # 2. 没有标记，走正常的 Supervisor 路由
-            logger.info("🔄 未检测到标记，使用 Supervisor 路由...")
+            # 2. 检查关键词路由（优先于 Supervisor）
+            keyword_result = KeywordRouter.match(user_input)
+
+            if keyword_result.matched:
+                logger.info(f"🔑 检测到关键词路由")
+                logger.info(f"🎯 目标 Agent: {keyword_result.target_agent}")
+                logger.info(f"📌 匹配的关键词: {', '.join(keyword_result.matched_keywords)}")
+
+                # 直接路由到 calendar_agent
+                if keyword_result.target_agent == "calendar_agent":
+                    logger.info("🚀 直接调用 CalendarAgent (跳过 Supervisor)...")
+                    response = calendar_agent.invoke(keyword_result.original_message)
+                    logger.info(f"📤 CalendarAgent 返回响应 (前200字): {response[:200]}...")
+
+                    # 检测是否需要回退
+                    redirect_result = detect_redirect(response)
+
+                    if redirect_result.is_redirect:
+                        logger.info(f"🔄 CalendarAgent 请求回退")
+                        logger.info(f"📝 回退原因: {redirect_result.reason}")
+                        logger.info("🔄 重新使用 Supervisor 路由...")
+
+                        # 获取会话历史
+                        session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
+                        session_history = session_mgr.get_history(config.USER_ID)
+
+                        # 构建带有回退提示的消息
+                        enhanced_message = f"""[系统提示：calendar_agent 已判定此消息不属于日历范畴，原因：{redirect_result.reason}。请从其他可用工具中选择合适的 Agent 处理。]
+
+{user_input}"""
+
+                        messages = session_history + [
+                            {"role": "user", "content": enhanced_message}
+                        ]
+
+                        # 调用 Supervisor 重新路由
+                        result = supervisor.invoke({"messages": messages})
+
+                        logger.info(f"✓ Supervisor 重新路由完成,消息数量: {len(result.get('messages', []))}")
+
+                        # 提取响应
+                        messages_list = result.get('messages', [])
+                        final_message = messages_list[-1] if messages_list else None
+
+                        if hasattr(final_message, 'content'):
+                            response = final_message.content
+                        else:
+                            response = str(final_message)
+
+                        logger.info(f"📤 Supervisor 返回响应 (前200字): {response[:200]}...")
+
+                        # ⚠️ 保存到会话历史时使用原始消息（不包含系统提示）
+                        session_mgr.add_interaction(
+                            user_id=config.USER_ID,
+                            user_input=user_input,  # 使用原始消息
+                            assistant_response=response,
+                            agent_name="supervisor",  # 标记为 supervisor 处理
+                            async_persist=True
+                        )
+                        logger.info("💾 交互已保存 (回退路由)")
+                        logger.info("=" * 80)
+
+                        return {
+                            "response": response,
+                            "timestamp": datetime.now().isoformat()
+                        }
+
+                    # 没有回退，正常处理
+                    # 保存会话历史
+                    session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
+                    session_mgr.add_interaction(
+                        user_id=config.USER_ID,
+                        user_input=user_input,
+                        assistant_response=response,
+                        agent_name="calendar_agent",
+                        async_persist=True
+                    )
+                    logger.info("💾 交互已保存 (关键词路由)")
+                    logger.info("=" * 80)
+
+                    return {
+                        "response": response,
+                        "timestamp": datetime.now().isoformat()
+                    }
+
+            # 3. 没有标记也没有关键词匹配，走正常的 Supervisor 路由
+            logger.info("🔄 未检测到标记和关键词，使用 Supervisor 路由...")
 
             # 获取会话历史管理器
             session_mgr = get_session_manager(max_history_length=10, refresh_interval=0)
