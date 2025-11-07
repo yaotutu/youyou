@@ -79,13 +79,13 @@ uv run ruff check src/
 ## 核心架构
 
 ### 多 Agent 系统
-采用 Supervisor-Worker 模式，三层 Agent 架构：
+采用 Supervisor-Worker 模式，多 Agent 架构：
 
 1. **Supervisor Agent** (`agents/supervisor/`)
    - 使用 `ROUTER_MODEL` 进行意图识别和路由
    - 通过 LangChain 1.0 的 `create_agent` 创建
    - **重要**：必须传入 `ChatOpenAI` 实例，而不是字符串格式的模型名
-   - 调用两个子 Agent 工具：`item_agent_tool` 和 `chat_agent_tool`
+   - 调用子 Agent 工具：`item_agent_tool`、`chat_agent_tool`、`note_agent_tool`、`calendar_agent_tool`
 
 2. **ItemAgent** (`agents/item_agent/`)
    - 使用 `AGENT_MODEL` 处理物品位置相关任务
@@ -95,6 +95,17 @@ uv run ruff check src/
 3. **ChatAgent** (`agents/chat_agent/`)
    - 使用 `AGENT_MODEL` 处理普通对话
    - 无需外部工具，纯对话能力
+
+4. **NoteAgent** (`agents/note_agent/`)
+   - 使用 `AGENT_MODEL` 处理笔记和知识管理
+   - 提供工具：保存笔记、搜索笔记、分析 GitHub 项目
+   - 使用 Qdrant 向量库和 SQLite 数据库
+
+5. **CalendarAgent** (`agents/calendar_agent/`)（新增）
+   - 使用 `AGENT_MODEL` 处理日历提醒相关任务
+   - 提供工具：`add_calendar_reminder`、`list_upcoming_reminders`、`delete_calendar_reminder`
+   - 基于 CalDAV 协议，支持 iCloud、Google Calendar 等主流日历服务
+   - 使用 LLM 进行自然语言时间解析
 
 ### 记忆系统 (`core/memory.py`)
 基于 mem0 和 Qdrant 的向量存储：

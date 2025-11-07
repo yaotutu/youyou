@@ -11,6 +11,7 @@ from .prompts import SUPERVISOR_SYSTEM_PROMPT
 from agents.item_agent import item_agent  # noqa: F401
 from agents.chat_agent import chat_agent  # noqa: F401
 from agents.note_agent import note_agent  # noqa: F401
+from agents.calendar_agent import calendar_agent  # noqa: F401
 
 
 def create_supervisor():

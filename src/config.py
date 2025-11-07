@@ -33,6 +33,15 @@ class Config:
     ZEP_API_KEY: str = os.getenv("ZEP_API_KEY", "")  # Zep Cloud API Key
     ZEP_API_URL: str = os.getenv("ZEP_API_URL", "http://localhost:8000")  # 本地 Zep URL
 
+    # CalDAV 日历配置
+    CALDAV_URL: str = os.getenv("CALDAV_URL", "")
+    CALDAV_USERNAME: str = os.getenv("CALDAV_USERNAME", "")
+    CALDAV_PASSWORD: str = os.getenv("CALDAV_PASSWORD", "")
+    CALDAV_CALENDAR_NAME: str = os.getenv("CALDAV_CALENDAR_NAME", "")
+    CALDAV_DEFAULT_REMINDER_MINUTES: int = int(
+        os.getenv("CALDAV_DEFAULT_REMINDER_MINUTES", "10")
+    )
+
     @classmethod
     def validate(cls) -> bool:
         """验证配置是否有效"""
@@ -50,6 +59,7 @@ class Config:
         """显示当前配置(隐藏敏感信息)"""
         masked_key = '*' * 10 + cls.OPENAI_API_KEY[-4:] if cls.OPENAI_API_KEY else '未设置'
         masked_zep_key = '*' * 10 + cls.ZEP_API_KEY[-4:] if cls.ZEP_API_KEY else '未设置'
+        masked_caldav_password = '*' * 10 + cls.CALDAV_PASSWORD[-4:] if cls.CALDAV_PASSWORD else '未设置'
         print("当前配置:")
         print(f"  API Base: {cls.OPENAI_API_BASE}")
         print(f"  API Key: {masked_key}")
@@ -59,6 +69,9 @@ class Config:
         print(f"  数据目录: {cls.DATA_DIR}")
         print(f"  Zep API Key: {masked_zep_key}")
         print(f"  Zep API URL: {cls.ZEP_API_URL}")
+        print(f"  CalDAV URL: {cls.CALDAV_URL if cls.CALDAV_URL else '未设置'}")
+        print(f"  CalDAV 用户名: {cls.CALDAV_USERNAME if cls.CALDAV_USERNAME else '未设置'}")
+        print(f"  CalDAV 密码: {masked_caldav_password}")
 
 
 # 全局配置实例

@@ -23,6 +23,9 @@ dependencies = [
     "qdrant-client>=1.7.0",  # 向量数据库
     "requests>=2.31.0",  # HTTP 请求（GitHub 爬虫）
     "beautifulsoup4>=4.12.0",  # HTML 解析（可选）
+    # CalendarAgent 依赖
+    "caldav>=2.0.1",  # CalDAV 客户端
+    "icalendar>=6.3.0",  # iCalendar 事件格式
 ]
 
 [project.scripts]
